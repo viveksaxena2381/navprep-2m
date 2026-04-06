@@ -404,7 +404,7 @@ export default function App() {
  });
 
  // ─── Auth State (Local — no Firebase needed) ───
- const ADMIN_EMAIL = "admin@navprep.in";
+ const ADMIN_EMAIL = "viveksaxena2381@gmail.com";
  const [currentUser, setCurrentUser] = useState(null);
  const [authLoading, setAuthLoading] = useState(true);
  const [authPage, setAuthPage] = useState("login"); // "login" | "signup"
