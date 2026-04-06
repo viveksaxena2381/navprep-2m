@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
+import { syncUserToFirestore, fetchAllUsersFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
 const AUTH_STORAGE_KEY = "navprep-users";
@@ -26,6 +27,7 @@ const trackVisit = () => {
  if (!analytics.dailyHits) analytics.dailyHits = {};
  analytics.dailyHits[today] = (analytics.dailyHits[today] || 0) + 1;
  saveAnalytics(analytics);
+ syncVisitToFirestore(); // fire-and-forget Firestore sync
 };
 
 // Track a login event
@@ -36,6 +38,7 @@ const trackLogin = (email) => {
  // Keep last 500 entries to prevent localStorage bloat
  if (analytics.loginHistory.length > 500) analytics.loginHistory = analytics.loginHistory.slice(-500);
  saveAnalytics(analytics);
+ syncLoginToFirestore(email); // fire-and-forget Firestore sync
 };
 
 const simpleHash = async (str) => {
@@ -67,6 +70,7 @@ const localAuth = {
  };
  users[key] = user;
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+ syncUserToFirestore(user); // sync new user to Firestore
  trackLogin(key);
  const session = { email: user.email, displayName: user.displayName };
  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
@@ -85,6 +89,7 @@ const localAuth = {
  user.loginCount = (user.loginCount || 0) + 1;
  users[key] = user;
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+ syncUserToFirestore(user); // sync updated login info to Firestore
  trackLogin(key);
  const session = { email: user.email, displayName: user.displayName };
  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
@@ -105,12 +110,14 @@ const localAuth = {
  if (users[key]) {
  Object.assign(users[key], updates);
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+ syncUserUpdateToFirestore(email, updates); // sync update to Firestore
  }
  },
  deleteUser(email) {
  const users = getStoredUsers();
  delete users[email.toLowerCase().trim()];
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+ deleteUserFromFirestore(email); // sync deletion to Firestore
  },
  getAnalytics() {
  return getAnalytics();
@@ -13153,18 +13160,18 @@ export default function App() {
 
  const inputStyle = {
  width: "100%", padding: "14px 18px", fontSize: 15, borderRadius: 12,
- border: `1px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.12)"}`,
- background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)",
- color: darkMode ? "#e8e4dc" : "#14120e",
+ border: "1px solid rgba(255,255,255,0.12)",
+ background: "rgba(255,255,255,0.05)",
+ color: "#e8e4dc",
  fontFamily: "'DM Sans', sans-serif", outline: "none", transition: "border-color 0.2s, box-shadow 0.2s",
  boxSizing: "border-box"
  };
  const inputFocusStyle = {
- borderColor: darkMode ? "rgba(212,175,55,0.5)" : "rgba(154,110,16,0.4)",
- boxShadow: darkMode ? "0 0 0 3px rgba(212,175,55,0.12)" : "0 0 0 3px rgba(154,110,16,0.08)"
+ borderColor: "rgba(212,175,55,0.5)",
+ boxShadow: "0 0 0 3px rgba(212,175,55,0.12)"
  };
  const labelStyle = {
- display: "block", fontSize: 12, fontWeight: 600, color: darkMode ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.5)",
+ display: "block", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.55)",
  marginBottom: 6, letterSpacing: 0.5, textTransform: "uppercase"
  };
  const goldBtn = {
@@ -13228,7 +13235,7 @@ export default function App() {
 
  {/* Login Card — compact */}
  <div style={{
- background: darkMode ? "rgba(13,33,55,0.85)" : "rgba(255,255,255,0.06)",
+ background: "rgba(13,33,55,0.85)",
  backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
  borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)",
  boxShadow: "0 24px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)",
@@ -14508,13 +14515,43 @@ export default function App() {
  const [subForm, setSubForm] = useState({ plan: "free", days: 30, paymentRef: "" });
 
  useEffect(() => {
+ // Load local data instantly
  setUsers(localAuth.getAllUsers());
  setAnalytics(localAuth.getAnalytics());
+ // Then merge in Firestore data (all users across all devices)
+ fetchAllUsersFromFirestore().then(firestoreUsers => {
+ if (firestoreUsers && Object.keys(firestoreUsers).length > 0) {
+ setUsers(prev => ({ ...firestoreUsers, ...prev }));
+ }
+ });
+ fetchAnalyticsFromFirestore().then(firestoreAnalytics => {
+ if (firestoreAnalytics) {
+ setAnalytics(prev => ({
+ totalVisits: Math.max(prev.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
+ dailyHits: { ...(prev.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
+ loginHistory: [...(prev.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
+ }));
+ }
+ });
  }, []);
 
  const refreshData = () => {
  setUsers(localAuth.getAllUsers());
  setAnalytics(localAuth.getAnalytics());
+ fetchAllUsersFromFirestore().then(firestoreUsers => {
+ if (firestoreUsers && Object.keys(firestoreUsers).length > 0) {
+ setUsers(prev => ({ ...firestoreUsers, ...prev }));
+ }
+ });
+ fetchAnalyticsFromFirestore().then(firestoreAnalytics => {
+ if (firestoreAnalytics) {
+ setAnalytics(prev => ({
+ totalVisits: Math.max(prev.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
+ dailyHits: { ...(prev.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
+ loginHistory: [...(prev.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
+ }));
+ }
+ });
  };
 
  const userList = Object.values(users).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
