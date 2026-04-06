@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PDF extracts & temp build scripts (not needed for app)
+_pdf_extracts/
+_extracted_*.txt
+pdf_*.txt
+apply_*.mjs
+enrich_*.js
+temp_ror_pages/
+src/_insert_*.js
+src/firebase.js
+
+# Original unoptimized logo backup
+public/logo_original_1024.png
+
+# Claude Code local files
+.claude/
+
+# Environment
+.env
+.env.local
