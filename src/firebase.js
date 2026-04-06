@@ -24,6 +24,8 @@ const isConfigured = firebaseConfig.apiKey &&
 let db = null;
 let initError = null;
 
+console.log("[Firebase] Config check — apiKey present:", !!firebaseConfig.apiKey, "projectId:", firebaseConfig.projectId || "MISSING");
+
 if (isConfigured) {
   try {
     const app = initializeApp(firebaseConfig);
