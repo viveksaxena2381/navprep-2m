@@ -14513,45 +14513,57 @@ export default function App() {
  const [analytics, setAnalytics] = useState({ totalVisits: 0, dailyHits: {}, loginHistory: [] });
  const [selectedUser, setSelectedUser] = useState(null);
  const [subForm, setSubForm] = useState({ plan: "free", days: 30, paymentRef: "" });
+ const [firestoreStatus, setFirestoreStatus] = useState("loading"); // loading | connected | error
+
+ const loadFirestoreData = async () => {
+ try {
+ const firestoreUsers = await fetchAllUsersFromFirestore();
+ if (firestoreUsers !== null) {
+ const mergedUsers = { ...firestoreUsers };
+ // Also include any local-only users
+ const localUsers = localAuth.getAllUsers();
+ Object.keys(localUsers).forEach(key => {
+ if (!mergedUsers[key]) mergedUsers[key] = localUsers[key];
+ });
+ setUsers(mergedUsers);
+ setFirestoreStatus("connected");
+ console.log("[Admin] Merged users — Firestore:", Object.keys(firestoreUsers).length, "Local:", Object.keys(localUsers).length, "Total:", Object.keys(mergedUsers).length);
+ } else {
+ setFirestoreStatus("error");
+ }
+ } catch (err) {
+ console.error("[Admin] Firestore load failed:", err);
+ setFirestoreStatus("error");
+ }
+
+ try {
+ const firestoreAnalytics = await fetchAnalyticsFromFirestore();
+ if (firestoreAnalytics) {
+ const localAnalytics = localAuth.getAnalytics();
+ setAnalytics({
+ totalVisits: Math.max(localAnalytics.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
+ dailyHits: { ...(localAnalytics.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
+ loginHistory: [...(localAnalytics.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
+ });
+ }
+ } catch (err) {
+ console.error("[Admin] Analytics load failed:", err);
+ }
+ };
 
  useEffect(() => {
  // Load local data instantly
  setUsers(localAuth.getAllUsers());
  setAnalytics(localAuth.getAnalytics());
- // Then merge in Firestore data (all users across all devices)
- fetchAllUsersFromFirestore().then(firestoreUsers => {
- if (firestoreUsers && Object.keys(firestoreUsers).length > 0) {
- setUsers(prev => ({ ...firestoreUsers, ...prev }));
- }
- });
- fetchAnalyticsFromFirestore().then(firestoreAnalytics => {
- if (firestoreAnalytics) {
- setAnalytics(prev => ({
- totalVisits: Math.max(prev.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
- dailyHits: { ...(prev.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
- loginHistory: [...(prev.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
- }));
- }
- });
+ // Then fetch and merge Firestore data
+ loadFirestoreData();
  }, []);
 
  const refreshData = () => {
  setUsers(localAuth.getAllUsers());
  setAnalytics(localAuth.getAnalytics());
- fetchAllUsersFromFirestore().then(firestoreUsers => {
- if (firestoreUsers && Object.keys(firestoreUsers).length > 0) {
- setUsers(prev => ({ ...firestoreUsers, ...prev }));
- }
- });
- fetchAnalyticsFromFirestore().then(firestoreAnalytics => {
- if (firestoreAnalytics) {
- setAnalytics(prev => ({
- totalVisits: Math.max(prev.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
- dailyHits: { ...(prev.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
- loginHistory: [...(prev.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
- }));
- }
- });
+ setFirestoreStatus("loading");
+ loadFirestoreData();
  };
 
  const userList = Object.values(users).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -14629,6 +14641,13 @@ export default function App() {
  <div>
  <h1 style={{ ...css.sectionTitle, marginBottom: 2, fontSize: 22 }}>Admin Dashboard</h1>
  <div style={{ fontSize: 12, color: theme.textMuted }}>Manage users, subscriptions & analytics</div>
+ </div>
+ <div style={{ marginLeft: "auto", padding: "6px 14px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+ background: firestoreStatus === "connected" ? "rgba(76,175,80,0.15)" : firestoreStatus === "loading" ? "rgba(255,152,0,0.15)" : "rgba(244,67,54,0.15)",
+ color: firestoreStatus === "connected" ? "#4CAF50" : firestoreStatus === "loading" ? "#FF9800" : "#f44336",
+ border: `1px solid ${firestoreStatus === "connected" ? "rgba(76,175,80,0.3)" : firestoreStatus === "loading" ? "rgba(255,152,0,0.3)" : "rgba(244,67,54,0.3)"}`
+ }}>
+ {firestoreStatus === "connected" ? "🟢 Firestore Connected" : firestoreStatus === "loading" ? "⏳ Connecting to Firestore..." : "🔴 Firestore Offline — showing local data only"}
  </div>
  </div>
 

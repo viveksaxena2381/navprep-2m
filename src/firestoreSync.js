@@ -2,76 +2,88 @@
 // Fire-and-forget sync functions that mirror localStorage data to Firestore.
 // All functions are safe to call even if Firestore is unavailable — they
 // silently no-op so the app works identically with or without Firebase.
-import { db, firestoreAvailable } from "./firebase.js";
+import { db } from "./firebase.js";
 import {
   doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  collection, increment, arrayUnion, serverTimestamp
+  collection, increment, arrayUnion
 } from "firebase/firestore";
 
 // ─── Helpers ─────────────────────────────────────────────────
-// Firestore doc IDs can't contain '/' — emails with dots are fine
 const emailToDocId = (email) => email.toLowerCase().trim();
 
-const guard = () => firestoreAvailable && db;
+// Check db at call time, not at module load time
+const isReady = () => {
+  if (!db) {
+    console.warn("[Firestore] db is null — Firestore not initialized");
+    return false;
+  }
+  return true;
+};
 
 // ─── User Sync ───────────────────────────────────────────────
 
 /** Upsert a user document (strips passwordHash for security) */
 export const syncUserToFirestore = async (userObj) => {
-  if (!guard()) return;
+  if (!isReady()) return;
   try {
     const { passwordHash, ...safeUser } = userObj;
     const docId = emailToDocId(safeUser.email);
+    console.log("[Firestore] Syncing user:", docId);
     await setDoc(doc(db, "users", docId), {
       ...safeUser,
       lastSyncedAt: Date.now()
     }, { merge: true });
+    console.log("[Firestore] User synced successfully:", docId);
   } catch (err) {
-    console.warn("[Firestore] syncUser failed:", err.message);
+    console.error("[Firestore] syncUser failed:", err.message, err);
   }
 };
 
 /** Fetch ALL users from Firestore (for admin dashboard) */
 export const fetchAllUsersFromFirestore = async () => {
-  if (!guard()) return null;
+  if (!isReady()) return null;
   try {
+    console.log("[Firestore] Fetching all users...");
     const snapshot = await getDocs(collection(db, "users"));
     const users = {};
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       users[docSnap.id] = data;
     });
+    console.log("[Firestore] Fetched", Object.keys(users).length, "users from Firestore");
     return users;
   } catch (err) {
-    console.warn("[Firestore] fetchAllUsers failed:", err.message);
+    console.error("[Firestore] fetchAllUsers failed:", err.message, err);
     return null;
   }
 };
 
 /** Update specific fields for a user */
 export const syncUserUpdateToFirestore = async (email, updates) => {
-  if (!guard()) return;
+  if (!isReady()) return;
   try {
     const docId = emailToDocId(email);
-    // Remove passwordHash if accidentally included
     const { passwordHash, ...safeUpdates } = updates;
-    await updateDoc(doc(db, "users", docId), {
+    // Use setDoc with merge instead of updateDoc to handle missing docs
+    await setDoc(doc(db, "users", docId), {
       ...safeUpdates,
       lastSyncedAt: Date.now()
-    });
+    }, { merge: true });
+    console.log("[Firestore] User updated:", docId);
   } catch (err) {
-    console.warn("[Firestore] syncUserUpdate failed:", err.message);
+    console.error("[Firestore] syncUserUpdate failed:", err.message, err);
   }
 };
 
 /** Delete a user document */
 export const deleteUserFromFirestore = async (email) => {
-  if (!guard()) return;
+  if (!isReady()) return;
   try {
     const docId = emailToDocId(email);
     await deleteDoc(doc(db, "users", docId));
+    console.log("[Firestore] User deleted:", docId);
   } catch (err) {
-    console.warn("[Firestore] deleteUser failed:", err.message);
+    console.error("[Firestore] deleteUser failed:", err.message, err);
   }
 };
 
@@ -79,22 +91,23 @@ export const deleteUserFromFirestore = async (email) => {
 
 /** Sync a visit event — increments totalVisits and today's hit count */
 export const syncVisitToFirestore = async () => {
-  if (!guard()) return;
+  if (!isReady()) return;
   try {
     const today = new Date().toISOString().split("T")[0];
+    const todayKey = today.replace(/-/g, "_"); // Firestore-safe key (no hyphens in nested paths)
     await setDoc(doc(db, "analytics", "global"), {
       totalVisits: increment(1),
-      [`dailyHits.${today}`]: increment(1),
+      dailyHits: { [todayKey]: increment(1) },
       lastUpdated: Date.now()
     }, { merge: true });
   } catch (err) {
-    console.warn("[Firestore] syncVisit failed:", err.message);
+    console.error("[Firestore] syncVisit failed:", err.message, err);
   }
 };
 
 /** Sync a login event — appends to loginHistory array */
 export const syncLoginToFirestore = async (email) => {
-  if (!guard()) return;
+  if (!isReady()) return;
   try {
     const today = new Date().toISOString().split("T")[0];
     await setDoc(doc(db, "analytics", "global"), {
@@ -105,22 +118,27 @@ export const syncLoginToFirestore = async (email) => {
       }),
       lastUpdated: Date.now()
     }, { merge: true });
+    console.log("[Firestore] Login event synced for:", email);
   } catch (err) {
-    console.warn("[Firestore] syncLogin failed:", err.message);
+    console.error("[Firestore] syncLogin failed:", err.message, err);
   }
 };
 
 /** Fetch analytics from Firestore (for admin dashboard) */
 export const fetchAnalyticsFromFirestore = async () => {
-  if (!guard()) return null;
+  if (!isReady()) return null;
   try {
+    console.log("[Firestore] Fetching analytics...");
     const docSnap = await getDoc(doc(db, "analytics", "global"));
     if (docSnap.exists()) {
-      return docSnap.data();
+      const data = docSnap.data();
+      console.log("[Firestore] Analytics fetched:", data);
+      return data;
     }
+    console.log("[Firestore] No analytics document found yet");
     return null;
   } catch (err) {
-    console.warn("[Firestore] fetchAnalytics failed:", err.message);
+    console.error("[Firestore] fetchAnalytics failed:", err.message, err);
     return null;
   }
 };

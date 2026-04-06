@@ -14,21 +14,32 @@ const firebaseConfig = {
 };
 
 // Check if Firebase is properly configured (not placeholder values)
-const isConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("your_");
+const isConfigured = firebaseConfig.apiKey &&
+  firebaseConfig.apiKey.length > 10 &&
+  !firebaseConfig.apiKey.startsWith("your_") &&
+  !firebaseConfig.apiKey.startsWith("YOUR_") &&
+  firebaseConfig.projectId &&
+  firebaseConfig.projectId !== "YOUR_PROJECT_ID";
 
 let db = null;
+let initError = null;
 
 if (isConfigured) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    console.log("[Firebase] Firestore initialized");
+    console.log("[Firebase] Firestore initialized successfully for project:", firebaseConfig.projectId);
   } catch (err) {
-    console.warn("[Firebase] Init failed:", err.message);
+    initError = err;
+    console.error("[Firebase] Init failed:", err.message);
   }
 } else {
-  console.warn("[Firebase] Not configured — running in localStorage-only mode");
+  console.warn("[Firebase] Not configured — running in localStorage-only mode. Config:", {
+    hasApiKey: !!firebaseConfig.apiKey,
+    hasProjectId: !!firebaseConfig.projectId,
+    apiKeyPrefix: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + "..." : "missing"
+  });
 }
 
-export { db };
-export const firestoreAvailable = !!db;
+export { db, initError };
+export const firestoreAvailable = isConfigured && !!db;
