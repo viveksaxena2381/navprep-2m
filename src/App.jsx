@@ -398,6 +398,7 @@ export default function App() {
  const [selectedSubject, setSelectedSubject] = useState(null);
  const [selectedModule, setSelectedModule] = useState(null);
  const [selectedTopic, setSelectedTopic] = useState(null);
+ const [activeModIdx, setActiveModIdx] = useState(0);
  const [quizState, setQuizState] = useState(null);
  const [oralMode, setOralMode] = useState(false);
  const [progress, setProgress] = useState(() => {
@@ -514,12 +515,42 @@ export default function App() {
 
  const navigate = (pg, subject, mod, topic) => {
  setPage(pg);
- if (subject !== undefined) setSelectedSubject(subject);
- if (mod !== undefined) setSelectedModule(mod);
+ if (subject !== undefined) {
+  // Reset module tab when switching to a different subject
+  if (!selectedSubject || subject.id !== selectedSubject.id) setActiveModIdx(0);
+  setSelectedSubject(subject);
+ }
+ if (mod !== undefined) {
+  setSelectedModule(mod);
+  // When navigating to a topic, remember which module tab was active
+  if (subject && mod) {
+   const idx = (subject.modules || []).findIndex(m => m.id === mod.id);
+   if (idx >= 0) setActiveModIdx(idx);
+  }
+ }
  if (topic !== undefined) setSelectedTopic(topic);
  setQuizState(null);
  window.scrollTo(0, 0);
  };
+
+ // ── Back to Main button (top-left, goes to subject page or home) ──
+ const BackToMainButton = ({ subject, label }) => (
+  <button
+   onClick={() => subject ? navigate("subject", subject) : navigate("home")}
+   style={{
+    display: "inline-flex", alignItems: "center", gap: 6,
+    padding: "7px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+    background: subject ? subject.color + "14" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"),
+    color: subject ? subject.color : theme.accent,
+    border: `1px solid ${subject ? subject.color + "30" : theme.border}`,
+    cursor: "pointer", transition: "all 0.2s", marginBottom: 12,
+   }}
+   onMouseEnter={e => { e.currentTarget.style.background = subject ? subject.color + "22" : (darkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.07)"); }}
+   onMouseLeave={e => { e.currentTarget.style.background = subject ? subject.color + "14" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"); }}
+  >
+   ← {label || (subject ? `Back to ${subject.name}` : "Back to Home")}
+  </button>
+ );
 
  const startQuiz = (questions, title) => {
  const shuffled = [...questions].sort(() => Math.random() - 0.5).slice(0, Math.min(20, questions.length))
@@ -13062,6 +13093,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <div style={{ marginBottom: 28 }}>
  <h1 style={css.sectionTitle}>∑ Navigational Formulas</h1>
  <p style={{ color: theme.textMuted, margin: "8px 0 20px" }}>Quick-reference — all formulas from every topic, searchable and grouped by subject. Click any formula to jump to its topic.</p>
@@ -13789,7 +13821,6 @@ export default function App() {
  // PAGE: SUBJECT
  // ═══════════════════════════════════════════════
  const SubjectPage = () => {
- const [activeModIdx, setActiveModIdx] = useState(0);
  if (!selectedSubject) return null;
  const subj = selectedSubject;
  const allTopics = subj.modules.flatMap(m => m.topics);
@@ -13808,6 +13839,22 @@ export default function App() {
  {/* ── Subject Hero ── */}
  <div style={{ background: heroGrad, padding: "40px 28px 36px" }}>
  <div style={{ maxWidth: 1080, margin: "0 auto" }}>
+ {/* Back to Home button */}
+ <button
+  onClick={() => navigate("home")}
+  style={{
+   display: "inline-flex", alignItems: "center", gap: 6,
+   padding: "7px 16px", borderRadius: 10, fontSize: 13, fontWeight: 600,
+   background: "rgba(255,255,255,0.15)", color: "#FFF",
+   border: "1px solid rgba(255,255,255,0.3)",
+   cursor: "pointer", transition: "all 0.2s", marginBottom: 12,
+   backdropFilter: "blur(4px)",
+  }}
+  onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.25)"; }}
+  onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.15)"; }}
+ >
+  ← Back to Home
+ </button>
  {/* Breadcrumb on hero */}
  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 20 }}>
  <span onClick={() => navigate("home")} style={{ color: "rgba(255,255,255,0.7)", cursor: "pointer", fontWeight: 500 }}>Home</span>
@@ -14059,6 +14106,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton subject={selectedSubject} />
  <Breadcrumb items={[
  { label: "Home", onClick: () => navigate("home") },
  { label: selectedSubject.name, onClick: () => navigate("subject", selectedSubject) },
@@ -14177,6 +14225,7 @@ export default function App() {
  const resultColor = pct >= 80 ? theme.success : pct >= 50 ? theme.warning : theme.danger;
  return (
  <div style={css.container}>
+ <BackToMainButton subject={selectedSubject} />
  <div style={{ ...css.card, padding: "44px", textAlign: "center", maxWidth: 560, margin: "0 auto", borderTop: `4px solid ${resultColor}` }}>
  <div style={{ fontSize: 54, marginBottom: 16 }}>{pct >= 80 ? "🎉" : pct >= 50 ? "📘" : "📖"}</div>
  <h2 style={{ ...css.sectionTitle, fontSize: 24 }}>{pct >= 80 ? "Excellent!" : pct >= 50 ? "Good effort" : "Keep studying"}</h2>
@@ -14214,6 +14263,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton subject={selectedSubject} />
  <div style={{ maxWidth: 640, margin: "0 auto" }}>
  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
  <div style={{ fontSize: 14, fontWeight: 600, color: theme.textMuted }}>{title}</div>
@@ -14337,6 +14387,7 @@ export default function App() {
  if (filtered.length === 0) {
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <div style={{ ...css.card, padding: 32, textAlign: "center", maxWidth: 480, margin: "0 auto" }}>
  <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
  <h2 style={{ ...css.sectionTitle, fontSize: 18 }}>No questions match your filter</h2>
@@ -14349,6 +14400,7 @@ export default function App() {
  const scenario = filtered[currentQ % filtered.length];
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <div style={{ maxWidth: 640, margin: "0 auto" }}>
  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
  <h2 style={{ ...css.sectionTitle, fontSize: 20, margin: 0 }}>🎤 Examiner mode</h2>
@@ -14399,6 +14451,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Oral exam preparation" }]} />
  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
  <div>
@@ -14627,6 +14680,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Admin Dashboard" }]} />
 
  {/* Header */}
@@ -14903,6 +14957,7 @@ export default function App() {
 
  return (
  <div style={css.container}>
+ <BackToMainButton />
  <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Progress dashboard" }]} />
  <h1 style={{ ...css.sectionTitle, marginBottom: 24 }}>📊 Progress dashboard</h1>
 
