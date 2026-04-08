@@ -8406,6 +8406,27 @@ Regular checks of compass error are required by good seamanship and SOLAS. The O
           { type: "practice-mcq", question: { q: "The audible range of a whistle on a vessel of 200m or more is approximately:", options: ["0.5 nautical miles", "1 nautical mile", "1.5 nautical miles", "2 nautical miles"], correct: 3, explanation: "Annex III: Whistle audibility ranges — vessels 200m+: 2 NM, vessels 75-200m: 1.5 NM, vessels 20-75m: 1 NM, vessels <20m: 0.5 NM. These are approximate ranges in still air conditions." } },
           { type: "practice-mcq", question: { q: "When approaching a blind bend in a narrow channel, a vessel should sound:", options: ["5 short blasts", "1 prolonged blast — answered by 1 prolonged from any approaching vessel", "2 short blasts", "3 short blasts"], correct: 1, explanation: "Rule 34(e): A vessel nearing a bend or area where other vessels may be obscured shall sound 1 prolonged blast. Any approaching vessel around the bend shall answer with 1 prolonged blast." } }
         ]},
+        { id: "t-nav-8-cards", name: "ROR Cards — Interactive Flashcards", sections: [
+          { type: "narrative", paragraphs: [
+            "# ROR Cards — Rules of the Road Flashcards",
+            "Interactive flashcards covering vessel lights, day signals, fog signals, and collision avoidance actions for all COLREGS vessel types. Flip each card to reveal the answer with a simple explanation.",
+            "Toggle between **Night Cards** (lights & shapes seen at night) and **Day Cards** (day signals & shapes). Filter by vessel category using the color-coded pills above the cards."
+          ]},
+          { type: "animated-diagram", component: "RORCards", title: "ROR Cards — Rules of the Road Flashcards" },
+          { type: "narrative", paragraphs: [
+            "## How to Use These Cards",
+            "1. Read the **Situation** on the front of the card — picture yourself on the bridge seeing this vessel.",
+            "2. Think about what action you would take, what lights/signals you expect, and what fog signal applies.",
+            "3. Tap **Flip** to reveal the answer with all four fields: Situation, Action, Lights/Day Signals, and Fog Signals.",
+            "4. The **Why?** explanation at the bottom connects the answer to the relevant COLREGS rule in plain language.",
+            "## Key Principles",
+            "• **Starboard side target** → You are the **stand-on** vessel → Maintain course and speed (Rule 17)",
+            "• **Port side target** → You are the **give-way** vessel → Alter to starboard, pass astern (Rule 16)",
+            "• **End-on / Head-on** → Both vessels alter to starboard → Pass port to port (Rule 14)",
+            "• **Overtaking** → Overtaking vessel ALWAYS gives way regardless of type (Rule 13)",
+            "• **Rule 18 Hierarchy**: NUC > RAM > CBD > Fishing > Sailing > Power-driven"
+          ]}
+        ]},
         { id: "t-nav-8-pq", name: "Solved Past Question Papers", content: "",
           sections: [
             { type: "callout", kind: "exam-tip", title: "\ud83d\udcdd About This Section", body: "COLREGS questions are tested in EVERY DG Shipping examination \u2014 written and oral. You must be able to apply rules to real scenarios and identify lights/shapes. Expect 2-3 COLREGS questions in the oral exam." },

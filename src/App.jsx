@@ -13012,8 +13012,284 @@ export default function App() {
  );
  };
 
+ // ── ROR Cards — Interactive Flashcards ──
+ const RORCardsAnim = () => {
+ const [catFilter, setCatFilter] = useState("All");
+ const [cardIdx, setCardIdx] = useState(0);
+ const [flipped, setFlipped] = useState(false);
+ const [setType, setSetType] = useState("night"); // night | day
+
+ const nightCards = [
+  { id:1, cat:"Towing", sit:"Power-driven vessel towing, tow length > 200 m, underway, seen from starboard side.", action:"Maintain course and speed.", why:"Vessel on your starboard side — you are the stand-on vessel. Hold your course.", lights:"Masthead lights forward & aft, sidelights & stern light, 2 additional masthead lights in vertical line, yellow towing light above stern light. Towed vessel: sidelights & stern light.", fog:"One prolonged + two short blasts. Towed (if manned): one prolonged + three short blasts." },
+  { id:2, cat:"Towing", sit:"Power-driven vessel towing, tow length > 200 m, underway, seen from port side.", action:"One short blast, alter course to starboard and pass round stern of last vessel/object towed.", why:"Vessel on your port side — you are the give-way vessel. Alter to starboard to pass astern.", lights:"Masthead lights forward & aft, sidelights & stern light, 2 additional masthead lights in vertical line, yellow towing light above stern light. Towed vessel: sidelights & stern light.", fog:"One prolonged + two short blasts. Towed (if manned): one prolonged + three short blasts." },
+  { id:3, cat:"Towing", sit:"Inconspicuous, partly submerged vessel/object towed, tow length < 200 m, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"Towed object is hard to see. Stay well clear and pass on the safe side.", lights:"Breadth < 25 m: all-round white lights forward & aft. Breadth > 25 m: additional all-round white lights at extremities. Length > 100 m: additional all-round whites at intervals < 100 m.", fog:"Nil." },
+  { id:5, cat:"Sailing", sit:"Sailing vessel underway, also propelled by machinery, seen from starboard side.", action:"Maintain course and speed.", why:"On your starboard — you are stand-on. She shows masthead lights (using engine), so treat as power-driven.", lights:"Masthead lights forward & aft, sidelights & stern light. Length < 50 m: aft masthead not compulsory.", fog:"Making way: one prolonged blast. Stopped: two prolonged blasts (2 sec interval)." },
+  { id:6, cat:"Sailing", sit:"Sailing vessel underway, also propelled by machinery, seen from port side.", action:"One short blast, alter course to starboard.", why:"Vessel on your port — you are give-way. Alter to starboard.", lights:"Masthead lights forward & aft, sidelights & stern light. Length < 50 m: aft masthead not compulsory.", fog:"Making way: one prolonged blast. Stopped: two prolonged blasts (2 sec interval)." },
+  { id:7, cat:"Fishing", sit:"Vessel fishing with nets/lines extending < 150 m, underway or at anchor, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"Fishing vessel — keep clear (Rule 18 hierarchy). Alter away from her gear.", lights:"All-round red over white in vertical line. Making way: sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:9, cat:"Fishing", sit:"Vessel fishing with nets/lines extending > 150 m, underway or at anchor, seen end on from ahead.", action:"Two short blasts, alter course to port away from gear.", why:"Head-on with fishing vessel — alter to port (away from gear direction).", lights:"All-round red over white in vertical line. Making way: sidelights & stern light. All-round white in direction of gear.", fog:"One prolonged + two short blasts." },
+  { id:11, cat:"NUC", sit:"Vessel Not Under Command, underway, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"NUC vessel cannot manoeuvre — she is highest in Rule 18 hierarchy. Keep well clear.", lights:"Two all-round red lights in vertical line. Making way: sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:12, cat:"RAM", sit:"Vessel Restricted in Ability to Manoeuvre (except mine clearance), underway, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"RAM vessel has limited manoeuvrability — keep clear.", lights:"All-round red, white, red in vertical line. Making way: masthead lights, sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:14, cat:"Towing", sit:"Power-driven vessel towing, RAM, tow length > 200 m, underway, seen from starboard side.", action:"Two short blasts, alter course to port and pass round stern.", why:"This vessel is both towing AND RAM — doubly restricted. Keep well clear.", lights:"Masthead lights, sidelights & stern light, 2 additional mastheads, yellow towing light, plus RAM lights (red-white-red).", fog:"One prolonged + two short blasts." },
+  { id:15, cat:"RAM", sit:"Dredge, RAM, underway or at anchor, seen end on.", action:"Two short blasts, alter course to port towards safe side.", why:"Dredge shows green lights on safe side, red on obstruction side. Pass on the GREEN side.", lights:"All-round red, white, red in vertical line. Two all-round red on obstruction side. Two all-round green on safe side. Making way: masthead lights, sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:16, cat:"RAM", sit:"Small vessel engaged in diving operations, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"Diving vessel — divers in water. Stay well clear, no wash.", lights:"All-round red, white, red in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:17, cat:"Mine", sit:"Vessel engaged in mine clearance operation, underway, seen end on.", action:"One short blast, alter course to starboard and pass > 1000 m clear.", why:"Mine clearance — mandatory 1000 m clearance zone. Do NOT approach.", lights:"Three all-round green lights (one at foremast head, one at each fore yard). Masthead lights, sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:19, cat:"CBD", sit:"Power-driven vessel constrained by draught, underway, seen from starboard side.", action:"One short blast, alter course to starboard and pass round her stern.", why:"CBD vessel cannot leave the deep channel. You must keep clear (Rule 28).", lights:"Three all-round red lights in vertical line. Masthead lights, sidelights & stern light.", fog:"One prolonged + two short blasts." },
+  { id:20, cat:"Pilot", sit:"Pilot vessel underway, seen from starboard side.", action:"Maintain course and speed.", why:"On your starboard — stand-on vessel.", lights:"All-round white over red at or near masthead. Sidelights & stern light.", fog:"Making way: one prolonged. Stopped: two prolonged. Optional: four short blasts." },
+  { id:21, cat:"Pilot", sit:"Pilot vessel underway, seen from port side.", action:"One short blast, alter course to starboard.", why:"On your port — give-way vessel.", lights:"All-round white over red at or near masthead. Sidelights & stern light.", fog:"Making way: one prolonged. Stopped: two prolonged. Optional: four short blasts." },
+  { id:23, cat:"Anchored", sit:"Vessel at anchor, seen from port side.", action:"One short blast, alter course to starboard.", why:"Anchored vessel — alter away to avoid.", lights:"All-round white lights forward & at stern. Working lights to illuminate deck (not compulsory < 100 m).", fog:"Length < 100 m: rapid bell ringing 5 sec. Length > 100 m: bell forward + gong aft. Optional: one short, one prolonged, one short." },
+  { id:24, cat:"Aground", sit:"Vessel aground, seen from starboard side.", action:"One short blast, alter course to starboard, reverse course and inform Master.", why:"Aground vessel — danger area! Reverse and stay clear. Shallow water ahead.", lights:"Two all-round red in vertical line. All-round white forward & at stern.", fog:"Rapid bell ringing 5 sec + three distinct strokes before and after. Optional: two short + one prolonged." },
+  { id:25, cat:"Fishing", sit:"Trawler, underway, shooting nets, seen from starboard side.", action:"Two short blasts, alter course to port.", why:"Trawler shooting nets — keep clear, nets being deployed.", lights:"All-round green over white. Masthead light abaft and higher. Sidelights & stern light. Two all-round white lights (shooting indicator).", fog:"One prolonged + two short blasts." },
+  { id:26, cat:"Fishing", sit:"Trawler, underway or at anchor, hauling nets, seen from port side.", action:"One short blast, alter course to starboard.", why:"Vessel on port side — give-way. Trawler is hauling nets.", lights:"All-round green over white. Masthead light abaft and higher. Sidelights & stern light. All-round white over red (hauling indicator).", fog:"One prolonged + two short blasts." },
+ ];
+
+ const dayCards = [
+  { id:1, cat:"PD", sit:"Power-driven vessel < 50 m, underway, seen end on.", action:"One short blast, alter course to starboard.", why:"Head-on situation (Rule 14). Both vessels alter to starboard and pass port-to-port.", day:"No day signal.", fog:"Making way: one prolonged. Stopped: two prolonged (2 sec interval)." },
+  { id:2, cat:"PD", sit:"Power-driven vessel < 50 m, underway, seen from starboard side.", action:"Maintain course and speed.", why:"Vessel on your starboard — you are stand-on. Hold course and speed.", day:"No day signal.", fog:"Making way: one prolonged. Stopped: two prolonged (2 sec interval)." },
+  { id:3, cat:"PD", sit:"Power-driven vessel < 50 m, underway, seen from port side.", action:"One short blast, alter course to starboard.", why:"Vessel on your port — you are give-way. Alter to starboard to pass astern.", day:"No day signal.", fog:"Making way: one prolonged. Stopped: two prolonged (2 sec interval)." },
+  { id:4, cat:"PD", sit:"Power-driven vessel (probably 50 m+, or < 50 m towing/pushing, tow 200 m or less), seen end on.", action:"One short blast, alter course to starboard.", why:"Head-on — Rule 14 applies. Both alter to starboard.", day:"No day signal.", fog:"Making way: one prolonged. Stopped: two prolonged (2 sec interval)." },
+  { id:10, cat:"ACV", sit:"Air-cushion vessel < 50 m in non-displacement mode, underway, seen end on.", action:"One short blast, alter course to starboard.", why:"Head-on with hovercraft — treat same as power-driven. Alter starboard.", day:"No day signal.", fog:"One prolonged blast." },
+  { id:19, cat:"Towing", sit:"Power-driven vessel towing underway, seen end on — (a) < 50 m with tow > 200 m, or (b) 50 m+ with tow 200 m or less.", action:"One short blast, alter course to starboard.", why:"Head-on with towing vessel. Alter to starboard.", day:"(a) One diamond. (b) No day signal.", fog:"One prolonged + two short blasts." },
+  { id:24, cat:"Towing", sit:"Power-driven vessel towing (< 50 m), tow > 200 m, seen from starboard side.", action:"Maintain course and speed.", why:"On your starboard — stand-on.", day:"One diamond.", fog:"One prolonged + two short blasts." },
+  { id:52, cat:"Towing", sit:"Inconspicuous partly submerged vessel/object towed, breadth < 25 m, length 100 m or less.", action:"Action according to position of tug.", why:"The towed object has no manoeuvrability. Judge by the tug's position.", day:"One diamond at aftermost extremity. If tow > 200 m: additional diamond forward.", fog:"No fog signal." },
+  { id:55, cat:"Sailing", sit:"Sailing vessel underway, seen end on.", action:"One short blast, alter course to starboard.", why:"Head-on with sailing vessel — standard Rule 14 action.", day:"No day signal.", fog:"One prolonged + two short blasts." },
+  { id:58, cat:"Sailing", sit:"Sailing vessel < 20 m, underway, seen end on.", action:"One short blast, alter course to starboard.", why:"Small sailing vessel head-on. Standard action.", day:"No day signal.", fog:"One prolonged + two short blasts." },
+  { id:67, cat:"Fishing", sit:"Trawler < 50 m, making way, seen end on.", action:"One short blast, alter course to starboard.", why:"Head-on with trawler. Keep clear of fishing vessel.", day:"Two cones, apexes together, in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:72, cat:"Fishing", sit:"Trawler probably 50 m+, making way, seen end on.", action:"One short blast, alter course to starboard.", why:"Large trawler head-on. Keep clear.", day:"Two cones, apexes together, in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:82, cat:"Fishing", sit:"Fishing vessel (other than trawler), making way, gear extending 150 m or less, seen end on.", action:"One short blast, alter course to starboard.", why:"Fishing vessel head-on. Alter starboard.", day:"Two cones, apexes together, in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:90, cat:"Fishing", sit:"Fishing vessel (other than trawler), making way, gear extending > 150 m, seen end on.", action:"One short blast, alter course to starboard.", why:"Large gear deployed — keep extra clearance.", day:"Two cones apexes together + cone apex upwards in direction of gear.", fog:"One prolonged + two short blasts." },
+  { id:101, cat:"Fishing", sit:"Trawler < 50 m, making way, shooting nets, seen end on.", action:"One short blast, alter course to starboard.", why:"Trawler deploying nets. Keep well clear.", day:"Two cones apexes together + flag Z.", fog:"One prolonged + two short blasts." },
+  { id:102, cat:"Fishing", sit:"Trawler < 50 m, making way, hauling nets, seen end on.", action:"One short blast, alter course to starboard.", why:"Trawler recovering nets. Keep clear.", day:"Two cones apexes together + flag G.", fog:"One prolonged + two short blasts." },
+  { id:145, cat:"NUC", sit:"Not Under Command vessel, making way, seen end on.", action:"One short blast, alter course to starboard.", why:"NUC head-on — she cannot manoeuvre. You must keep clear.", day:"Two balls in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:150, cat:"Aground", sit:"(a) Vessel aground < 50 m. (b) NUC vessel making way, seen from astern.", action:"(a) One short blast, alter starboard, reverse course, inform Master. (b) One short blast, alter starboard.", why:"Aground = danger zone (shallow water). NUC from astern = overtaking.", day:"(a) Three balls in vertical line. (b) Two balls in vertical line.", fog:"(a) Three bell strokes + rapid ringing. (b) One prolonged + two short." },
+  { id:154, cat:"RAM", sit:"Vessel RAM or dredger without obstruction (< 50 m), making way, seen end on.", action:"One short blast, alter course to starboard.", why:"RAM vessel head-on. She has limited manoeuvrability.", day:"Ball, diamond, ball in vertical line.", fog:"One prolonged + two short blasts." },
+  { id:162, cat:"RAM", sit:"Vessel RAM or dredger without obstruction, at anchor or making way, seen from astern.", action:"One short blast, alter course to starboard.", why:"Overtaking a RAM vessel. Keep clear.", day:"Ball, diamond, ball in vertical line.", fog:"One prolonged + two short blasts." },
+ ];
+
+ const cards = setType === "night" ? nightCards : dayCards;
+ const categories = ["All", ...new Set(cards.map(c => c.cat))];
+ const filtered = catFilter === "All" ? cards : cards.filter(c => c.cat === catFilter);
+ const current = filtered[cardIdx % filtered.length];
+
+ const catColors = { Towing:"#1565C0", Fishing:"#2E7D32", NUC:"#C62828", RAM:"#6A1B9A", Sailing:"#00838F", Anchored:"#E65100", Aground:"#B71C1C", Mine:"#4A148C", CBD:"#EF6C00", Pilot:"#F9A825", ACV:"#0097A7", PD:"#1976D2" };
+
+ // ── Visual diagram configs ──
+ // Night: [x, y, colorCode] where w=white r=red g=green y=yellow
+ // viewType: s=starboard p=port e=end-on a=astern
+ const LC = { w:"#FFFFFF", r:"#FF4040", g:"#40FF40", y:"#FFD700" };
+ const nightVis = {
+  1:  { v:"s", l:[[80,22,"w"],[80,38,"w"],[80,54,"w"],[55,82,"g"],[80,100,"y"],[80,114,"w"]] },
+  2:  { v:"p", l:[[80,22,"w"],[80,38,"w"],[80,54,"w"],[55,82,"r"],[80,100,"y"],[80,114,"w"]] },
+  3:  { v:"s", noMast:true, l:[[80,35,"w"],[80,75,"w"]] },
+  5:  { v:"s", l:[[80,30,"w"],[80,55,"w"],[55,82,"g"],[80,114,"w"]] },
+  6:  { v:"p", l:[[80,30,"w"],[80,55,"w"],[55,82,"r"],[80,114,"w"]] },
+  7:  { v:"s", l:[[80,28,"r"],[80,48,"w"],[55,82,"g"],[80,114,"w"]] },
+  9:  { v:"e", l:[[80,28,"r"],[80,48,"w"],[58,82,"r"],[142,82,"g"],[135,48,"w"]] },
+  11: { v:"s", l:[[80,28,"r"],[80,48,"r"],[55,82,"g"],[80,114,"w"]] },
+  12: { v:"s", l:[[80,20,"r"],[80,36,"w"],[80,52,"r"],[80,68,"w"],[55,85,"g"],[80,114,"w"]] },
+  14: { v:"s", l:[[80,10,"w"],[80,22,"w"],[80,34,"w"],[80,48,"r"],[80,58,"w"],[80,68,"r"],[55,82,"g"],[80,98,"y"],[80,112,"w"]] },
+  15: { v:"e", yard:[42,40,120], l:[[80,18,"r"],[80,34,"w"],[80,50,"r"],[40,34,"r"],[40,50,"r"],[120,34,"g"],[120,50,"g"],[80,66,"w"],[58,85,"r"],[142,85,"g"]] },
+  16: { v:"s", l:[[80,30,"r"],[80,50,"w"],[80,70,"r"]] },
+  17: { v:"e", yard:[38,52,108], l:[[80,22,"g"],[52,38,"g"],[108,38,"g"],[80,58,"w"],[58,82,"r"],[142,82,"g"],[80,114,"w"]] },
+  19: { v:"s", l:[[80,18,"r"],[80,34,"r"],[80,50,"r"],[80,66,"w"],[55,85,"g"],[80,114,"w"]] },
+  20: { v:"s", l:[[80,30,"w"],[80,50,"r"],[55,82,"g"],[80,114,"w"]] },
+  21: { v:"p", l:[[80,30,"w"],[80,50,"r"],[55,82,"r"],[80,114,"w"]] },
+  23: { v:"p", noMast:true, l:[[65,30,"w"],[125,85,"w"]] },
+  24: { v:"s", l:[[80,20,"r"],[80,38,"r"],[65,55,"w"],[125,85,"w"]] },
+  25: { v:"s", l:[[80,18,"g"],[80,38,"w"],[95,58,"w"],[125,38,"w"],[125,55,"w"],[55,82,"g"],[80,114,"w"]] },
+  26: { v:"p", l:[[80,18,"g"],[80,38,"w"],[95,58,"w"],[125,38,"w"],[125,55,"r"],[55,82,"r"],[80,114,"w"]] },
+ };
+ // Day: shapes - b=ball d=diamond cu=cone-up cd=cone-down fz=flag-Z fg=flag-G cy=cylinder
+ const dayVis = {
+  1:  { v:"e", s:[] }, 2: { v:"s", s:[] }, 3: { v:"p", s:[] }, 4: { v:"e", s:[] }, 10: { v:"e", s:[] },
+  19: { v:"e", s:[[80,50,"d"]] },
+  24: { v:"s", s:[[80,50,"d"]] },
+  52: { v:"s", s:[[70,40,"d"],[110,70,"d"]] },
+  55: { v:"e", s:[] }, 58: { v:"e", s:[] },
+  67: { v:"e", s:[[80,35,"cd"],[80,62,"cu"]] },
+  72: { v:"e", s:[[80,35,"cd"],[80,62,"cu"]] },
+  82: { v:"e", s:[[80,35,"cd"],[80,62,"cu"]] },
+  90: { v:"e", s:[[80,35,"cd"],[80,62,"cu"],[128,52,"cu"]] },
+  101:{ v:"e", s:[[80,35,"cd"],[80,62,"cu"],[128,48,"fz"]] },
+  102:{ v:"e", s:[[80,35,"cd"],[80,62,"cu"],[128,48,"fg"]] },
+  145:{ v:"e", s:[[80,35,"b"],[80,65,"b"]] },
+  150:{ v:"e", s:[[80,25,"b"],[80,50,"b"],[80,75,"b"]] },
+  154:{ v:"e", s:[[80,25,"b"],[80,50,"d"],[80,75,"b"]] },
+  162:{ v:"a", s:[[80,25,"b"],[80,50,"d"],[80,75,"b"]] },
+ };
+
+ const renderVisual = () => {
+  const isN = setType === "night";
+  const vis = isN ? nightVis[current.id] : dayVis[current.id];
+  if (!vis) return null;
+  const hasContent = isN ? (vis.l && vis.l.length > 0) : (vis.s && vis.s.length > 0);
+  const W = 200, H = 155, hY = 128;
+  const vw = vis.v || "s";
+  const isWide = vw === "s" || vw === "p";
+  const hullD = isWide
+   ? `M22,${hY} C45,${hY+18} 155,${hY+18} 178,${hY}`
+   : `M62,${hY} Q100,${hY+20} 138,${hY}`;
+  const viewLabel = vw==="s"?"STARBOARD VIEW":vw==="p"?"PORT VIEW":vw==="e"?"END ON VIEW":"STERN VIEW";
+  return (
+   <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", maxWidth:320, display:"block", margin:"12px auto 8px", borderRadius:14, overflow:"hidden" }}>
+    <defs>
+     <linearGradient id="rorSea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor={isN?"#060D18":"#87CEEB"} />
+      <stop offset="82%" stopColor={isN?"#060D18":"#87CEEB"} />
+      <stop offset="82%" stopColor={isN?"#040A12":"#2E86AB"} />
+      <stop offset="100%" stopColor={isN?"#040A12":"#2E86AB"} />
+     </linearGradient>
+    </defs>
+    <rect width={W} height={H} fill="url(#rorSea)" />
+    {/* Stars for night */}
+    {isN && [15,45,128,170,25,155,88,60].map((sx,i) => (
+     <circle key={i} cx={sx} cy={[12,8,15,22,42,5,7,30][i]} r={[0.8,0.6,0.7,0.5,0.6,0.9,0.5,0.7][i]} fill="#FFF" opacity={[0.35,0.25,0.3,0.2,0.25,0.4,0.2,0.3][i]} />
+    ))}
+    {/* Hull */}
+    <path d={hullD} fill={isN?"#0E1826":"#2C3E50"} stroke={isN?"#1A2838":"#1A252F"} strokeWidth={1.5} />
+    {/* Mast */}
+    {!vis.noMast && <line x1={80} y1={8} x2={80} y2={hY} stroke={isN?"#223344":"#555"} strokeWidth={1.5} />}
+    {/* Yardarm */}
+    {vis.yard && <line x1={vis.yard[1]} y1={vis.yard[0]} x2={vis.yard[2]} y2={vis.yard[0]} stroke={isN?"#223344":"#555"} strokeWidth={1.2} />}
+    {/* Night lights */}
+    {isN && vis.l && vis.l.map(([x,y,c],i) => (
+     <g key={i}>
+      <circle cx={x} cy={y} r={15} fill={LC[c]} opacity={0.07} />
+      <circle cx={x} cy={y} r={10} fill={LC[c]} opacity={0.15} />
+      <circle cx={x} cy={y} r={5.5} fill={LC[c]} opacity={0.85} />
+      <circle cx={x} cy={y} r={2.2} fill="#FFF" opacity={0.6} />
+     </g>
+    ))}
+    {/* Day shapes */}
+    {!isN && vis.s && vis.s.map(([x,y,t],i) => {
+     if (t==="b") return <circle key={i} cx={x} cy={y} r={9} fill="#222" stroke="#111" strokeWidth={1} />;
+     if (t==="d") return <polygon key={i} points={`${x},${y-12} ${x+8},${y} ${x},${y+12} ${x-8},${y}`} fill="#222" stroke="#111" strokeWidth={1} />;
+     if (t==="cu") return <polygon key={i} points={`${x},${y-10} ${x+9},${y+8} ${x-9},${y+8}`} fill="#222" stroke="#111" strokeWidth={1} />;
+     if (t==="cd") return <polygon key={i} points={`${x-9},${y-8} ${x+9},${y-8} ${x},${y+10}`} fill="#222" stroke="#111" strokeWidth={1} />;
+     if (t==="fz") return <g key={i}><rect x={x-11} y={y-8} width={22} height={16} fill="#FFD700" stroke="#333" strokeWidth={0.8} rx={1} /><polygon points={`${x-11},${y-8} ${x+11},${y-8} ${x+11},${y+8}`} fill="#1565C0" opacity={0.5} /><text x={x} y={y+4} textAnchor="middle" fill="#111" fontSize={10} fontWeight={700}>Z</text></g>;
+     if (t==="fg") return <g key={i}><rect x={x-11} y={y-8} width={22} height={16} fill="#1565C0" stroke="#333" strokeWidth={0.8} rx={1} />{[0,1,2].map(j=><rect key={j} x={x-11+j*7.33+3.67} y={y-8} width={3.67} height={16} fill="#FFD700" />)}<text x={x} y={y+4} textAnchor="middle" fill="#FFF" fontSize={10} fontWeight={700}>G</text></g>;
+     if (t==="cy") return <rect key={i} x={x-7} y={y-12} width={14} height={24} fill="#222" stroke="#111" strokeWidth={1} rx={4} />;
+     return null;
+    })}
+    {/* "No day signal" label */}
+    {!isN && (!vis.s || vis.s.length===0) && <text x={100} y={65} textAnchor="middle" fill="#556" fontSize={12} fontStyle="italic" fontWeight={500}>No day signal</text>}
+    {/* View label */}
+    <text x={100} y={H-3} textAnchor="middle" fill={isN?"#445566":"#556677"} fontSize={8.5} fontWeight={600} letterSpacing={1.5} fontFamily="'JetBrains Mono',monospace">{viewLabel}</text>
+   </svg>
+  );
+ };
+
+ if (!current) return null;
+
+ return (
+  <div style={{ background: darkMode ? "#0B1929" : "#F5F3EE", borderRadius: 16, padding: "20px", border: `1px solid ${darkMode ? "#1A3A5A" : "#ddd"}` }}>
+  <div style={{ textAlign: "center", marginBottom: 16 }}>
+   <div style={{ fontSize: 16, fontWeight: 700, color: darkMode ? "#D4AF37" : "#1A2744", marginBottom: 4, fontFamily: "'Playfair Display', serif" }}>ROR Cards — Rules of the Road Flashcards</div>
+   <div style={{ fontSize: 11, color: theme.textMuted }}>Tap a card to flip and reveal the answer</div>
+  </div>
+
+  {/* Set toggle */}
+  <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+   {[{ k:"night", l:"Night Cards (Lights)", n: nightCards.length }, { k:"day", l:"Day Cards (Shapes)", n: dayCards.length }].map(s => (
+    <button key={s.k} onClick={() => { setSetType(s.k); setCatFilter("All"); setCardIdx(0); setFlipped(false); }}
+     style={{ padding: "7px 16px", borderRadius: 10, fontSize: 12, fontWeight: setType === s.k ? 700 : 500, cursor: "pointer", border: `1.5px solid ${setType === s.k ? "#D4AF37" : theme.border}`, background: setType === s.k ? (darkMode ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.1)") : "transparent", color: setType === s.k ? "#D4AF37" : theme.textMuted, transition: "all 0.2s" }}>
+     {s.l} ({s.n})
+    </button>
+   ))}
+  </div>
+
+  {/* Category pills */}
+  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "center", marginBottom: 16 }}>
+   {categories.map(c => (
+    <button key={c} onClick={() => { setCatFilter(c); setCardIdx(0); setFlipped(false); }}
+     style={{ padding: "4px 12px", borderRadius: 8, fontSize: 11, fontWeight: catFilter === c ? 700 : 400, cursor: "pointer", border: `1px solid ${catFilter === c ? (catColors[c] || "#D4AF37") : theme.border}`, background: catFilter === c ? ((catColors[c] || "#D4AF37") + "18") : "transparent", color: catFilter === c ? (catColors[c] || "#D4AF37") : theme.textMuted, transition: "all 0.15s" }}>
+     {c} {c !== "All" && `(${cards.filter(x => x.cat === c).length})`}
+    </button>
+   ))}
+  </div>
+
+  {/* Card counter */}
+  <div style={{ textAlign: "center", fontSize: 11, color: theme.textMuted, marginBottom: 10, fontFamily: "'JetBrains Mono', monospace" }}>
+   Card {(cardIdx % filtered.length) + 1} of {filtered.length}
+  </div>
+
+  {/* Flashcard */}
+  <div onClick={() => setFlipped(!flipped)} style={{ cursor: "pointer", minHeight: 280, borderRadius: 16, padding: "24px 20px", position: "relative", overflow: "hidden", transition: "all 0.3s", background: flipped ? (darkMode ? "linear-gradient(135deg, #0D2818 0%, #0B1929 100%)" : "linear-gradient(135deg, #F0FAF0 0%, #E8F5E9 100%)") : (darkMode ? "linear-gradient(135deg, #111D2E 0%, #0B1929 100%)" : "linear-gradient(135deg, #FFFFFF 0%, #F5F3EE 100%)"), border: `2px solid ${flipped ? (darkMode ? "#2E7D3240" : "#4CAF5040") : (catColors[current.cat] || "#1976D2") + "40"}`, boxShadow: darkMode ? "0 8px 32px rgba(0,0,0,0.4)" : "0 8px 24px rgba(0,0,0,0.08)" }}>
+
+   {/* Card number badge */}
+   <div style={{ position: "absolute", top: 12, right: 14, width: 36, height: 36, borderRadius: "50%", background: (catColors[current.cat] || "#1976D2"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#FFF", fontFamily: "'JetBrains Mono', monospace", boxShadow: `0 2px 8px ${(catColors[current.cat] || "#1976D2")}60` }}>
+    {current.id}
+   </div>
+
+   {/* Category label */}
+   <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 700, background: (catColors[current.cat] || "#1976D2") + "18", color: catColors[current.cat] || "#1976D2", border: `1px solid ${(catColors[current.cat] || "#1976D2")}30`, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+    {current.cat}
+   </div>
+
+   {!flipped ? (
+    <>
+     {/* Visual diagram */}
+     {renderVisual()}
+     {/* Question prompt */}
+     <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+      {renderVisual() ? (setType === "night" ? "Identify this vessel from its lights — what is your action?" : "Identify this vessel from its day signals — what is your action?") : "Situation"}
+     </div>
+     <div style={{ fontSize: 14, fontWeight: 600, color: theme.text, lineHeight: 1.6, marginBottom: 12 }}>{current.sit}</div>
+     <div style={{ fontSize: 12, color: darkMode ? "#667788" : "#999", textAlign: "center", marginTop: 10, fontStyle: "italic" }}>
+      Tap to reveal answer
+     </div>
+    </>
+   ) : (
+    <>
+     {/* Answer side */}
+     <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Situation</div>
+     <div style={{ fontSize: 13, color: theme.text, lineHeight: 1.5, marginBottom: 12, opacity: 0.8 }}>{current.sit}</div>
+
+     <div style={{ padding: "10px 14px", borderRadius: 10, marginBottom: 10, background: current.action.includes("Maintain") ? (darkMode ? "rgba(46,125,50,0.15)" : "rgba(76,175,80,0.1)") : (darkMode ? "rgba(230,81,0,0.15)" : "rgba(255,152,0,0.1)"), border: `1px solid ${current.action.includes("Maintain") ? "#4CAF5030" : "#FF980030"}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: current.action.includes("Maintain") ? "#4CAF50" : "#FF9800", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Action</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{current.action}</div>
+     </div>
+
+     <div style={{ padding: "10px 14px", borderRadius: 10, marginBottom: 10, background: darkMode ? "rgba(21,101,192,0.1)" : "rgba(25,118,210,0.06)", border: `1px solid ${darkMode ? "#1565C020" : "#1976D220"}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#1976D2", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{setType === "night" ? "Lights" : "Day Signal"}</div>
+      <div style={{ fontSize: 12, color: theme.text, lineHeight: 1.5 }}>{setType === "night" ? current.lights : current.day}</div>
+     </div>
+
+     <div style={{ padding: "8px 14px", borderRadius: 10, marginBottom: 10, background: darkMode ? "rgba(106,27,154,0.1)" : "rgba(156,39,176,0.06)", border: `1px solid ${darkMode ? "#6A1B9A20" : "#9C27B020"}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#9C27B0", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Fog Signal</div>
+      <div style={{ fontSize: 12, color: theme.text, lineHeight: 1.5 }}>{current.fog}</div>
+     </div>
+
+     <div style={{ padding: "8px 14px", borderRadius: 10, background: darkMode ? "rgba(212,175,55,0.08)" : "rgba(212,175,55,0.06)", border: `1px solid rgba(212,175,55,0.2)` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Why?</div>
+      <div style={{ fontSize: 12, color: theme.text, lineHeight: 1.5, fontStyle: "italic" }}>{current.why}</div>
+     </div>
+    </>
+   )}
+  </div>
+
+  {/* Navigation buttons */}
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14 }}>
+   <button onClick={(e) => { e.stopPropagation(); setCardIdx(Math.max(0, (cardIdx % filtered.length) - 1)); setFlipped(false); }}
+    disabled={cardIdx % filtered.length === 0}
+    style={{ padding: "8px 18px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer", border: `1px solid ${theme.border}`, background: theme.surfaceAlt, color: theme.text, opacity: cardIdx % filtered.length === 0 ? 0.3 : 1 }}>
+    ← Previous
+   </button>
+   <button onClick={(e) => { e.stopPropagation(); setFlipped(!flipped); }}
+    style={{ padding: "8px 18px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer", border: `1.5px solid #D4AF37`, background: darkMode ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.08)", color: "#D4AF37" }}>
+    {flipped ? "Show Question" : "Flip Card"}
+   </button>
+   <button onClick={(e) => { e.stopPropagation(); setCardIdx(Math.min(filtered.length - 1, (cardIdx % filtered.length) + 1)); setFlipped(false); }}
+    disabled={cardIdx % filtered.length >= filtered.length - 1}
+    style={{ padding: "8px 18px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", background: "linear-gradient(135deg, #00b4d8 0%, #0096b7 100%)", color: "#FFF", opacity: cardIdx % filtered.length >= filtered.length - 1 ? 0.3 : 1 }}>
+    Next →
+   </button>
+  </div>
+  </div>
+ );
+ };
+
  // Registry of animated components
- const ANIM_REGISTRY = { CDMVTCompass: CDMVTCompassAnim, TidalCurve: TidalCurveAnim, CourseVectorTriangle: CourseVectorTriangleAnim, AmplitudeCompass: AmplitudeCompassAnim, TRSStructure: TRSStructureAnim, GlobalCirculation: GlobalCirculationAnim, FrontalSystem: FrontalSystemAnim, CompassConversion: CompassConversionAnim, GreatCircle: GreatCircleAnim, RadarPlot: RadarPlotAnim, MercatorScale: MercatorScaleAnim, ThreeBearingFix: ThreeBearingFixAnim, RunningFix: RunningFixAnim, MercatorSailing: MercatorSailingAnim, PlaneSailing: PlaneSailingAnim, DeadReckoning: DeadReckoningAnim, CourseToSteer: CourseToSteerAnim, DaysWork: DaysWorkAnim, RaisingDipping: RaisingDippingAnim, HSAFix: HSAFixAnim, SextantPrinciple: SextantPrincipleAnim, SextantParts: SextantPartsAnim, HSAGeometric: HSAGeometricAnim, SextantErrors: SextantErrorsAnim, GMStability: GMStabilityAnim, GZCurve: GZCurveAnim, FreeSurface: FreeSurfaceAnim, TrimCalc: TrimCalcAnim, WeightShift: WeightShiftAnim, InclingExp: InclingExpAnim, AngleOfLoll: AngleOfLollAnim, LoadLine: LoadLineAnim, StabCriteria: StabCriteriaAnim, DamageStab: DamageStabAnim, CelestialSphere: CelestialSphereAnim, PZXTriangle: PZXTriangleAnim, InterceptWorkflow: InterceptWorkflowAnim, GPCircle: GPCircleAnim, COLREGSSituation: COLREGSSituationAnim, BeaufortScale: BeaufortScaleAnim, ShipCrossSection: ShipCrossSectionAnim, WatchHandoverFlow: WatchHandoverFlowAnim, PassagePlanningFlow: PassagePlanningFlowAnim, DoublingAngle: DoublingAngleAnim, LineSoundings: LineSoundingsAnim, RunningFixCurrent: RunningFixCurrentAnim, LightsDisplay: LightsDisplayAnim, Rule19Fog: Rule19FogAnim, FogSignals: FogSignalsAnim, NarrowChannel: NarrowChannelAnim, ShipTypes: ShipTypesAnim, RORSituations: RORSituationsAnim };
+ const ANIM_REGISTRY = { CDMVTCompass: CDMVTCompassAnim, TidalCurve: TidalCurveAnim, CourseVectorTriangle: CourseVectorTriangleAnim, AmplitudeCompass: AmplitudeCompassAnim, TRSStructure: TRSStructureAnim, GlobalCirculation: GlobalCirculationAnim, FrontalSystem: FrontalSystemAnim, CompassConversion: CompassConversionAnim, GreatCircle: GreatCircleAnim, RadarPlot: RadarPlotAnim, MercatorScale: MercatorScaleAnim, ThreeBearingFix: ThreeBearingFixAnim, RunningFix: RunningFixAnim, MercatorSailing: MercatorSailingAnim, PlaneSailing: PlaneSailingAnim, DeadReckoning: DeadReckoningAnim, CourseToSteer: CourseToSteerAnim, DaysWork: DaysWorkAnim, RaisingDipping: RaisingDippingAnim, HSAFix: HSAFixAnim, SextantPrinciple: SextantPrincipleAnim, SextantParts: SextantPartsAnim, HSAGeometric: HSAGeometricAnim, SextantErrors: SextantErrorsAnim, GMStability: GMStabilityAnim, GZCurve: GZCurveAnim, FreeSurface: FreeSurfaceAnim, TrimCalc: TrimCalcAnim, WeightShift: WeightShiftAnim, InclingExp: InclingExpAnim, AngleOfLoll: AngleOfLollAnim, LoadLine: LoadLineAnim, StabCriteria: StabCriteriaAnim, DamageStab: DamageStabAnim, CelestialSphere: CelestialSphereAnim, PZXTriangle: PZXTriangleAnim, InterceptWorkflow: InterceptWorkflowAnim, GPCircle: GPCircleAnim, COLREGSSituation: COLREGSSituationAnim, BeaufortScale: BeaufortScaleAnim, ShipCrossSection: ShipCrossSectionAnim, WatchHandoverFlow: WatchHandoverFlowAnim, PassagePlanningFlow: PassagePlanningFlowAnim, DoublingAngle: DoublingAngleAnim, LineSoundings: LineSoundingsAnim, RunningFixCurrent: RunningFixCurrentAnim, LightsDisplay: LightsDisplayAnim, Rule19Fog: Rule19FogAnim, FogSignals: FogSignalsAnim, NarrowChannel: NarrowChannelAnim, ShipTypes: ShipTypesAnim, RORSituations: RORSituationsAnim, RORCards: RORCardsAnim };
 
  // Error boundary — catches any runtime crash inside an animated diagram so only that card fails, not the whole page
  class AnimErrorBoundary extends Component {
