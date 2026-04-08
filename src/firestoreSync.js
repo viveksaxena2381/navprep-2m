@@ -4,7 +4,7 @@
 // silently no-op so the app works identically with or without Firebase.
 import { db } from "./firebase.js";
 import {
-  doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
+  doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, addDoc,
   collection, increment, arrayUnion
 } from "firebase/firestore";
 
@@ -140,5 +140,81 @@ export const fetchAnalyticsFromFirestore = async () => {
   } catch (err) {
     console.error("[Firestore] fetchAnalytics failed:", err.message, err);
     return null;
+  }
+};
+
+// ─── Feedback & Corrections Sync ────────────────────────────
+
+/** Submit a feedback item */
+export const submitFeedbackToFirestore = async (feedbackObj) => {
+  if (!isReady()) return;
+  try {
+    await addDoc(collection(db, "feedback"), { ...feedbackObj, syncedAt: Date.now() });
+    console.log("[Firestore] Feedback submitted");
+  } catch (err) {
+    console.error("[Firestore] submitFeedback failed:", err.message);
+  }
+};
+
+/** Submit a correction item */
+export const submitCorrectionToFirestore = async (correctionObj) => {
+  if (!isReady()) return;
+  try {
+    await addDoc(collection(db, "corrections"), { ...correctionObj, syncedAt: Date.now() });
+    console.log("[Firestore] Correction submitted");
+  } catch (err) {
+    console.error("[Firestore] submitCorrection failed:", err.message);
+  }
+};
+
+/** Fetch all feedback from Firestore (admin) */
+export const fetchAllFeedbackFromFirestore = async () => {
+  if (!isReady()) return null;
+  try {
+    const snapshot = await getDocs(collection(db, "feedback"));
+    const items = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ ...docSnap.data(), docId: docSnap.id });
+    });
+    return items;
+  } catch (err) {
+    console.error("[Firestore] fetchFeedback failed:", err.message);
+    return null;
+  }
+};
+
+/** Fetch all corrections from Firestore (admin) */
+export const fetchAllCorrectionsFromFirestore = async () => {
+  if (!isReady()) return null;
+  try {
+    const snapshot = await getDocs(collection(db, "corrections"));
+    const items = [];
+    snapshot.forEach((docSnap) => {
+      items.push({ ...docSnap.data(), docId: docSnap.id });
+    });
+    return items;
+  } catch (err) {
+    console.error("[Firestore] fetchCorrections failed:", err.message);
+    return null;
+  }
+};
+
+/** Toggle resolved status on a feedback item */
+export const updateFeedbackResolvedInFirestore = async (docId, resolved) => {
+  if (!isReady()) return;
+  try {
+    await updateDoc(doc(db, "feedback", docId), { resolved });
+  } catch (err) {
+    console.error("[Firestore] updateFeedbackResolved failed:", err.message);
+  }
+};
+
+/** Toggle resolved status on a correction item */
+export const updateCorrectionResolvedInFirestore = async (docId, resolved) => {
+  if (!isReady()) return;
+  try {
+    await updateDoc(doc(db, "corrections", docId), { resolved });
+  } catch (err) {
+    console.error("[Firestore] updateCorrectionResolved failed:", err.message);
   }
 };

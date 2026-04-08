@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
 import { ROR_NIGHT_CARDS, ROR_DAY_CARDS } from "./rorCardsData.js";
-import { syncUserToFirestore, fetchAllUsersFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore } from "./firestoreSync.js";
+import { syncUserToFirestore, fetchAllUsersFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
 const AUTH_STORAGE_KEY = "navprep-users";
 const SESSION_KEY = "navprep-session";
 const ANALYTICS_KEY = "navprep-analytics";
+const FEEDBACK_STORAGE_KEY = "navprep-feedback";
+const CORRECTIONS_STORAGE_KEY = "navprep-corrections";
 
 const getStoredUsers = () => {
  try { return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY)) || {}; } catch { return {}; }
@@ -19,6 +21,20 @@ const getAnalytics = () => {
 const saveAnalytics = (data) => {
  try { localStorage.setItem(ANALYTICS_KEY, JSON.stringify(data)); } catch {}
 };
+
+const getStoredFeedback = () => {
+ try { return JSON.parse(localStorage.getItem(FEEDBACK_STORAGE_KEY)) || []; } catch { return []; }
+};
+const saveStoredFeedback = (data) => {
+ try { localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify(data)); } catch {}
+};
+const getStoredCorrections = () => {
+ try { return JSON.parse(localStorage.getItem(CORRECTIONS_STORAGE_KEY)) || []; } catch { return []; }
+};
+const saveStoredCorrections = (data) => {
+ try { localStorage.setItem(CORRECTIONS_STORAGE_KEY, JSON.stringify(data)); } catch {}
+};
+const generateId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
 // Track a page visit
 const trackVisit = () => {
@@ -417,6 +433,8 @@ export default function App() {
  const [currentUser, setCurrentUser] = useState(null);
  const [authLoading, setAuthLoading] = useState(true);
  const [authPage, setAuthPage] = useState("login"); // "login" | "signup"
+ const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+ const [feedbackTab, setFeedbackTab] = useState("feedback"); // "feedback" | "correction"
 
  useEffect(() => {
  trackVisit(); // count every page load / visit
@@ -14940,13 +14958,134 @@ export default function App() {
  // ═══════════════════════════════════════════════
  // PAGE: ADMIN DASHBOARD (only visible to admin)
  // ═══════════════════════════════════════════════
+ // ═══════════════════════════════════════════════
+ // FEEDBACK & CORRECTION MODAL
+ // ═══════════════════════════════════════════════
+ const FeedbackCorrectionModal = () => {
+  const [fbMsg, setFbMsg] = useState("");
+  const [crSubject, setCrSubject] = useState("");
+  const [crModule, setCrModule] = useState("");
+  const [crTopic, setCrTopic] = useState("");
+  const [crRemarks, setCrRemarks] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const selSubject = SUBJECTS.find(s => s.id === crSubject);
+  const selModule = selSubject?.modules?.find(m => m.id === crModule);
+
+  const handleSubmitFeedback = () => {
+   if (!fbMsg.trim() || submitting) return;
+   setSubmitting(true);
+   const item = { id: generateId("fb"), type: "feedback", email: currentUser.email, displayName: currentUser.displayName, message: fbMsg.trim(), timestamp: Date.now(), resolved: false };
+   const stored = getStoredFeedback();
+   stored.push(item);
+   saveStoredFeedback(stored);
+   submitFeedbackToFirestore(item);
+   setSubmitting(false);
+   setSubmitted(true);
+   setFbMsg("");
+   setTimeout(() => { setFeedbackModalOpen(false); setSubmitted(false); }, 1800);
+  };
+
+  const handleSubmitCorrection = () => {
+   if (!crRemarks.trim() || !crSubject || !crModule || submitting) return;
+   setSubmitting(true);
+   const item = {
+    id: generateId("cr"), type: "correction", email: currentUser.email, displayName: currentUser.displayName,
+    subjectId: crSubject, subjectName: selSubject?.name || "", moduleId: crModule, moduleName: selModule?.name || "",
+    topicId: crTopic || null, topicName: (selModule?.topics?.find(t => t.id === crTopic)?.name) || null,
+    remarks: crRemarks.trim(), timestamp: Date.now(), resolved: false
+   };
+   const stored = getStoredCorrections();
+   stored.push(item);
+   saveStoredCorrections(stored);
+   submitCorrectionToFirestore(item);
+   setSubmitting(false);
+   setSubmitted(true);
+   setCrSubject(""); setCrModule(""); setCrTopic(""); setCrRemarks("");
+   setTimeout(() => { setFeedbackModalOpen(false); setSubmitted(false); }, 1800);
+  };
+
+  const selectStyle = { ...css.input, width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14, appearance: "auto", cursor: "pointer" };
+
+  return (
+   <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    onClick={() => { setFeedbackModalOpen(false); setSubmitted(false); }}>
+    <div onClick={e => e.stopPropagation()} style={{ background: darkMode ? "#0d2137" : "#fff", borderRadius: 18, padding: "28px 24px", width: "100%", maxWidth: 480, maxHeight: "85vh", overflow: "auto", border: `1px solid ${theme.border}`, boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <h2 style={{ fontSize: 18, fontWeight: 700, color: theme.text, fontFamily: "'Playfair Display', serif", margin: 0 }}>Submit Feedback</h2>
+      <button onClick={() => { setFeedbackModalOpen(false); setSubmitted(false); }} style={{ background: "none", border: "none", fontSize: 22, color: theme.textMuted, cursor: "pointer", padding: 4 }}>x</button>
+     </div>
+
+     {submitted ? (
+      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+       <div style={{ fontSize: 48, marginBottom: 12 }}>✓</div>
+       <div style={{ fontSize: 16, fontWeight: 600, color: theme.success }}>Thank you! Your {feedbackTab === "feedback" ? "feedback" : "correction report"} has been submitted.</div>
+      </div>
+     ) : (
+      <>
+       {/* Tabs */}
+       <div style={{ display: "flex", gap: 6, marginBottom: 20, background: darkMode ? "rgba(255,255,255,0.04)" : "#f5f5f5", borderRadius: 10, padding: 4 }}>
+        {[{ k: "feedback", l: "General Feedback" }, { k: "correction", l: "Report Correction" }].map(t => (
+         <button key={t.k} onClick={() => setFeedbackTab(t.k)} style={{ flex: 1, padding: "10px 12px", borderRadius: 8, fontSize: 13, fontWeight: feedbackTab === t.k ? 700 : 500, cursor: "pointer", border: "none", background: feedbackTab === t.k ? (darkMode ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.12)") : "transparent", color: feedbackTab === t.k ? "#d4af37" : theme.textMuted, transition: "all 0.2s" }}>
+          {t.l}
+         </button>
+        ))}
+       </div>
+
+       {feedbackTab === "feedback" ? (
+        <div>
+         <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>Share your thoughts, suggestions, or report any issues with the app.</div>
+         <textarea value={fbMsg} onChange={e => setFbMsg(e.target.value)} placeholder="Type your feedback here..." rows={5}
+          style={{ ...css.input, width: "100%", padding: "14px 16px", borderRadius: 12, fontSize: 14, resize: "vertical", minHeight: 120, fontFamily: "'DM Sans', sans-serif" }} />
+         <button onClick={handleSubmitFeedback} disabled={!fbMsg.trim() || submitting}
+          style={{ ...css.btn, width: "100%", marginTop: 16, padding: "13px 20px", fontSize: 15, fontWeight: 700, background: fbMsg.trim() ? theme.goldGradient : (darkMode ? "#1a2a3a" : "#ddd"), color: fbMsg.trim() ? "#1a1a2e" : theme.textMuted, cursor: fbMsg.trim() ? "pointer" : "not-allowed", border: "none", borderRadius: 12 }}>
+          {submitting ? "Submitting..." : "Submit Feedback"}
+         </button>
+        </div>
+       ) : (
+        <div>
+         <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>Found an error? Select the section and describe what needs to be corrected.</div>
+         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+          <select value={crSubject} onChange={e => { setCrSubject(e.target.value); setCrModule(""); setCrTopic(""); }} style={selectStyle}>
+           <option value="">Select Subject...</option>
+           {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.icon} {s.name}</option>)}
+          </select>
+          <select value={crModule} onChange={e => { setCrModule(e.target.value); setCrTopic(""); }} disabled={!crSubject} style={{ ...selectStyle, opacity: crSubject ? 1 : 0.5 }}>
+           <option value="">Select Module...</option>
+           {selSubject?.modules?.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+          <select value={crTopic} onChange={e => setCrTopic(e.target.value)} disabled={!crModule} style={{ ...selectStyle, opacity: crModule ? 1 : 0.5 }}>
+           <option value="">Select Topic (optional)...</option>
+           {selModule?.topics?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+         </div>
+         <textarea value={crRemarks} onChange={e => setCrRemarks(e.target.value)} placeholder="Describe the correction needed..." rows={4}
+          style={{ ...css.input, width: "100%", padding: "14px 16px", borderRadius: 12, fontSize: 14, resize: "vertical", minHeight: 100, fontFamily: "'DM Sans', sans-serif" }} />
+         <button onClick={handleSubmitCorrection} disabled={!crRemarks.trim() || !crSubject || !crModule || submitting}
+          style={{ ...css.btn, width: "100%", marginTop: 16, padding: "13px 20px", fontSize: 15, fontWeight: 700, background: (crRemarks.trim() && crSubject && crModule) ? theme.goldGradient : (darkMode ? "#1a2a3a" : "#ddd"), color: (crRemarks.trim() && crSubject && crModule) ? "#1a1a2e" : theme.textMuted, cursor: (crRemarks.trim() && crSubject && crModule) ? "pointer" : "not-allowed", border: "none", borderRadius: 12 }}>
+          {submitting ? "Submitting..." : "Submit Correction"}
+         </button>
+        </div>
+       )}
+      </>
+     )}
+    </div>
+   </div>
+  );
+ };
+
  const AdminDashboardPage = () => {
- const [adminTab, setAdminTab] = useState("users"); // users | analytics | settings
+ const [adminTab, setAdminTab] = useState("users"); // users | analytics | feedback | corrections
  const [users, setUsers] = useState({});
  const [analytics, setAnalytics] = useState({ totalVisits: 0, dailyHits: {}, loginHistory: [] });
  const [selectedUser, setSelectedUser] = useState(null);
  const [subForm, setSubForm] = useState({ plan: "free", days: 30, paymentRef: "" });
  const [firestoreStatus, setFirestoreStatus] = useState("loading"); // loading | connected | error
+ const [feedbackItems, setFeedbackItems] = useState([]);
+ const [correctionItems, setCorrectionItems] = useState([]);
+ const [feedbackFilter, setFeedbackFilter] = useState("all");
+ const [correctionFilter, setCorrectionFilter] = useState("all");
 
  const loadFirestoreData = async () => {
  try {
@@ -14982,12 +15121,39 @@ export default function App() {
  } catch (err) {
  console.error("[Admin] Analytics load failed:", err);
  }
+
+ // Load feedback & corrections
+ try {
+ const fsFeedback = await fetchAllFeedbackFromFirestore();
+ const localFb = getStoredFeedback();
+ if (fsFeedback) {
+  const merged = [...fsFeedback];
+  localFb.forEach(lf => { if (!merged.find(f => f.id === lf.id)) merged.push(lf); });
+  setFeedbackItems(merged.sort((a, b) => b.timestamp - a.timestamp));
+ } else {
+  setFeedbackItems(localFb.sort((a, b) => b.timestamp - a.timestamp));
+ }
+ } catch (err) { console.error("[Admin] Feedback load failed:", err); setFeedbackItems(getStoredFeedback()); }
+
+ try {
+ const fsCorrections = await fetchAllCorrectionsFromFirestore();
+ const localCr = getStoredCorrections();
+ if (fsCorrections) {
+  const merged = [...fsCorrections];
+  localCr.forEach(lc => { if (!merged.find(c => c.id === lc.id)) merged.push(lc); });
+  setCorrectionItems(merged.sort((a, b) => b.timestamp - a.timestamp));
+ } else {
+  setCorrectionItems(localCr.sort((a, b) => b.timestamp - a.timestamp));
+ }
+ } catch (err) { console.error("[Admin] Corrections load failed:", err); setCorrectionItems(getStoredCorrections()); }
  };
 
  useEffect(() => {
  // Load local data instantly
  setUsers(localAuth.getAllUsers());
  setAnalytics(localAuth.getAnalytics());
+ setFeedbackItems(getStoredFeedback().sort((a, b) => b.timestamp - a.timestamp));
+ setCorrectionItems(getStoredCorrections().sort((a, b) => b.timestamp - a.timestamp));
  // Then fetch and merge Firestore data
  loadFirestoreData();
  }, []);
@@ -15098,6 +15264,8 @@ export default function App() {
  {[
  { key: "users", label: "👥 Users & Subscriptions" },
  { key: "analytics", label: "📈 Analytics & Hits" },
+ { key: "feedback", label: `💬 Feedback (${feedbackItems.length})` },
+ { key: "corrections", label: `✏️ Corrections (${correctionItems.length})` },
  ].map(t => (
  <button key={t.key} style={tabBtnStyle(adminTab === t.key)} onClick={() => setAdminTab(t.key)}>{t.label}</button>
  ))}
@@ -15320,6 +15488,119 @@ export default function App() {
  </div>
  </div>
  )}
+
+ {/* ═══ TAB: FEEDBACK ═══ */}
+ {adminTab === "feedback" && (() => {
+  const filtered = feedbackFilter === "all" ? feedbackItems : feedbackItems.filter(f => feedbackFilter === "open" ? !f.resolved : f.resolved);
+  const unresolvedCount = feedbackItems.filter(f => !f.resolved).length;
+  const toggleResolved = (item) => {
+   const newResolved = !item.resolved;
+   const updated = feedbackItems.map(f => f.id === item.id ? { ...f, resolved: newResolved } : f);
+   setFeedbackItems(updated);
+   saveStoredFeedback(updated);
+   if (item.docId) updateFeedbackResolvedInFirestore(item.docId, newResolved);
+  };
+  return (
+  <div>
+   <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+    <StatCard label="Total Feedback" value={feedbackItems.length} color={theme.accent} icon="💬" />
+    <StatCard label="Unresolved" value={unresolvedCount} color={unresolvedCount > 0 ? theme.warning : theme.success} icon="📩" />
+   </div>
+   <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+    {["all", "open", "resolved"].map(f => (
+     <button key={f} onClick={() => setFeedbackFilter(f)}
+      style={{ padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: feedbackFilter === f ? 700 : 500, cursor: "pointer", border: `1px solid ${feedbackFilter === f ? theme.accent : theme.border}`, background: feedbackFilter === f ? theme.accentLight : "transparent", color: feedbackFilter === f ? theme.accent : theme.textMuted, textTransform: "capitalize" }}>
+      {f} {f === "open" ? `(${unresolvedCount})` : f === "resolved" ? `(${feedbackItems.length - unresolvedCount})` : `(${feedbackItems.length})`}
+     </button>
+    ))}
+   </div>
+   {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>No feedback items</div>}
+   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    {filtered.map(item => (
+     <div key={item.id} style={{ ...css.card, padding: "16px 20px", borderLeft: `4px solid ${item.resolved ? theme.success : theme.warning}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+       <div style={{ flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+         <div style={{ width: 28, height: 28, borderRadius: "50%", background: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff" }}>{(item.displayName || item.email || "?")[0].toUpperCase()}</div>
+         <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{item.displayName || "Unknown"}</div>
+          <div style={{ fontSize: 11, color: theme.textMuted }}>{item.email}</div>
+         </div>
+        </div>
+        <div style={{ fontSize: 14, color: theme.text, lineHeight: 1.5 }}>{item.message}</div>
+       </div>
+       <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 8 }}>{new Date(item.timestamp).toLocaleDateString()} {new Date(item.timestamp).toLocaleTimeString()}</div>
+        <button onClick={() => toggleResolved(item)}
+         style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", border: `1px solid ${item.resolved ? theme.success : theme.warning}`, background: item.resolved ? theme.success + "18" : theme.warning + "18", color: item.resolved ? theme.success : theme.warning }}>
+         {item.resolved ? "Resolved" : "Open"}
+        </button>
+       </div>
+      </div>
+     </div>
+    ))}
+   </div>
+  </div>
+  );
+ })()}
+
+ {/* ═══ TAB: CORRECTIONS ═══ */}
+ {adminTab === "corrections" && (() => {
+  const filtered = correctionFilter === "all" ? correctionItems : correctionItems.filter(c => correctionFilter === "open" ? !c.resolved : c.resolved);
+  const unresolvedCount = correctionItems.filter(c => !c.resolved).length;
+  const toggleResolved = (item) => {
+   const newResolved = !item.resolved;
+   const updated = correctionItems.map(c => c.id === item.id ? { ...c, resolved: newResolved } : c);
+   setCorrectionItems(updated);
+   saveStoredCorrections(updated);
+   if (item.docId) updateCorrectionResolvedInFirestore(item.docId, newResolved);
+  };
+  return (
+  <div>
+   <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+    <StatCard label="Total Corrections" value={correctionItems.length} color="#9C27B0" icon="✏️" />
+    <StatCard label="Unresolved" value={unresolvedCount} color={unresolvedCount > 0 ? theme.danger : theme.success} icon="🔴" />
+   </div>
+   <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+    {["all", "open", "resolved"].map(f => (
+     <button key={f} onClick={() => setCorrectionFilter(f)}
+      style={{ padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: correctionFilter === f ? 700 : 500, cursor: "pointer", border: `1px solid ${correctionFilter === f ? "#9C27B0" : theme.border}`, background: correctionFilter === f ? "#9C27B018" : "transparent", color: correctionFilter === f ? "#9C27B0" : theme.textMuted, textTransform: "capitalize" }}>
+      {f} {f === "open" ? `(${unresolvedCount})` : f === "resolved" ? `(${correctionItems.length - unresolvedCount})` : `(${correctionItems.length})`}
+     </button>
+    ))}
+   </div>
+   {filtered.length === 0 && <div style={{ padding: 40, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>No correction reports</div>}
+   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    {filtered.map(item => (
+     <div key={item.id} style={{ ...css.card, padding: "16px 20px", borderLeft: `4px solid ${item.resolved ? theme.success : theme.danger}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+       <div style={{ flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+         <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#9C27B0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff" }}>{(item.displayName || item.email || "?")[0].toUpperCase()}</div>
+         <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: theme.text }}>{item.displayName || "Unknown"}</div>
+          <div style={{ fontSize: 11, color: theme.textMuted }}>{item.email}</div>
+         </div>
+        </div>
+        <div style={{ fontSize: 11, color: theme.accent, marginBottom: 6, fontFamily: "'JetBrains Mono', monospace", background: theme.accentLight, display: "inline-block", padding: "3px 10px", borderRadius: 6 }}>
+         {item.subjectName} → {item.moduleName}{item.topicName ? ` → ${item.topicName}` : ""}
+        </div>
+        <div style={{ fontSize: 14, color: theme.text, lineHeight: 1.5 }}>{item.remarks}</div>
+       </div>
+       <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: theme.textMuted, marginBottom: 8 }}>{new Date(item.timestamp).toLocaleDateString()} {new Date(item.timestamp).toLocaleTimeString()}</div>
+        <button onClick={() => toggleResolved(item)}
+         style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", border: `1px solid ${item.resolved ? theme.success : theme.danger}`, background: item.resolved ? theme.success + "18" : theme.danger + "18", color: item.resolved ? theme.success : theme.danger }}>
+         {item.resolved ? "Resolved" : "Open"}
+        </button>
+       </div>
+      </div>
+     </div>
+    ))}
+   </div>
+  </div>
+  );
+ })()}
  </div>
  );
  };
@@ -15580,6 +15861,20 @@ export default function App() {
  {page === "dashboard" && <DashboardPage />}
  {page === "formulas" && <FormulasPage />}
  {page === "admin" && isAdmin && <AdminDashboardPage />}
+
+ {/* Floating Feedback Button */}
+ {currentUser && (
+  <button onClick={() => { setFeedbackModalOpen(true); setFeedbackTab("feedback"); }}
+   style={{ position: "fixed", bottom: 28, right: 28, width: 56, height: 56, borderRadius: "50%", background: theme.goldGradient, border: "none", cursor: "pointer", zIndex: 900, boxShadow: "0 4px 20px rgba(212,175,55,0.35)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, color: "#1a1a2e", transition: "transform 0.2s, box-shadow 0.2s" }}
+   onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; e.currentTarget.style.boxShadow = "0 6px 28px rgba(212,175,55,0.5)"; }}
+   onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 4px 20px rgba(212,175,55,0.35)"; }}
+   title="Send Feedback">
+   ✉
+  </button>
+ )}
+
+ {/* Feedback/Correction Modal */}
+ {feedbackModalOpen && currentUser && <FeedbackCorrectionModal />}
  </div>
  );
 }
