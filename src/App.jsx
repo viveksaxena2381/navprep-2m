@@ -1197,7 +1197,7 @@ export default function App() {
  }, [playing]);
  const range = hwH - lwH;
  const ht = (t) => lwH + range * (1 - Math.cos(t * Math.PI / 6)) / 2;
- const W = 480, H = 200, pL = 50, pR = 20, pT = 24, pB = 32;
+ const W = 500, H = 220, pL = 52, pR = 22, pT = 28, pB = 36;
  const pw = W - pL - pR, ph = H - pT - pB;
  const tx = t => pL + (t / 12) * pw;
  const ty = h => pT + ph - ((h - lwH) / (range || 1)) * ph;
@@ -1217,20 +1217,20 @@ export default function App() {
  <rect width={W} height={H} fill={darkMode ? "#0a1628" : "#F0F8FF"} rx="6"/>
  <path d={`${pts} L${tx(12)} ${pT+ph} L${pL} ${pT+ph} Z`} fill="#4A6FA5" opacity="0.15"/>
  <path d={pts} fill="none" stroke="#4A6FA5" strokeWidth="3"/>
- {Array.from({length:13},(_,h) => <g key={h}><line x1={tx(h)} y1={pT} x2={tx(h)} y2={pT+ph} stroke={darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)"} strokeWidth="1"/><text x={tx(h)} y={pT+ph+16} textAnchor="middle" fontSize="9" fill={theme.textMuted} fontFamily="Arial">{h}h</text></g>)}
+ {Array.from({length:13},(_,h) => <g key={h}><line x1={tx(h)} y1={pT} x2={tx(h)} y2={pT+ph} stroke={darkMode?"rgba(255,255,255,0.06)":"rgba(0,0,0,0.06)"} strokeWidth="1"/><text x={tx(h)} y={pT+ph+18} textAnchor="middle" fontSize="10" fill={theme.textMuted} fontFamily="'Segoe UI',system-ui,sans-serif">{h}h</text></g>)}
  <line x1={pL} y1={ty(hwH)} x2={pL+pw} y2={ty(hwH)} stroke="#E74C3C" strokeWidth="1" strokeDasharray="4,3"/>
- <text x={pL-5} y={ty(hwH)+4} textAnchor="end" fontSize="9.5" fill="#E74C3C" fontFamily="Arial">HW {hwH.toFixed(1)}m</text>
+ <text x={pL-5} y={ty(hwH)+4} textAnchor="end" fontSize="10" fill="#E74C3C" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">HW {hwH.toFixed(1)}m</text>
  <line x1={pL} y1={ty(lwH)} x2={pL+pw} y2={ty(lwH)} stroke="#4A6FA5" strokeWidth="1" strokeDasharray="4,3"/>
- <text x={pL-5} y={ty(lwH)+4} textAnchor="end" fontSize="9.5" fill="#4A6FA5" fontFamily="Arial">LW {lwH.toFixed(1)}m</text>
+ <text x={pL-5} y={ty(lwH)+4} textAnchor="end" fontSize="10" fill="#4A6FA5" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">LW {lwH.toFixed(1)}m</text>
  <line x1={cx} y1={pT} x2={cx} y2={pT+ph} stroke="#E74C3C" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.7"/>
  <circle cx={cx} cy={cy} r="7" fill="#E74C3C" stroke="white" strokeWidth="2"/>
  <rect x={Math.min(cx+10, W-82)} y={cy-14} width="78" height="18" rx="4" fill={darkMode?"#112a45":"white"} stroke={theme.border} strokeWidth="1"/>
  <text x={Math.min(cx+49, W-43)} y={cy+2} textAnchor="middle" fontSize="10" fill="#E74C3C" fontWeight="bold" fontFamily="Arial">{ht(timeH).toFixed(2)} m</text>
  {rotLabels.map(([l, t]) => {
  const mx = tx(t), mh = ht(t);
- return <text key={l} x={mx} y={ty(mh)-6} textAnchor="middle" fontSize="8.5" fill={darkMode?"#AAA":"#555"} fontFamily="Arial">{l}</text>;
+ return <text key={l} x={mx} y={ty(mh)-8} textAnchor="middle" fontSize="9" fill={darkMode?"#AAA":"#555"} fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="500">{l}</text>;
  })}
- {[['LW',0], ['HW',6], ['LW',12]].map(([l,t]) => <text key={l+t} x={tx(t)} y={pT-7} textAnchor="middle" fontSize="9" fill={theme.textMuted} fontWeight="bold" fontFamily="Arial">{l}</text>)}
+ {[['LW',0], ['HW',6], ['LW',12]].map(([l,t]) => <text key={l+t} x={tx(t)} y={pT-9} textAnchor="middle" fontSize="10" fill={theme.textMuted} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{l}</text>)}
  </svg>
  <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 6 }}>
  At {timeH.toFixed(1)}h from LW → Height = <strong style={{ color: theme.text, fontFamily: 'monospace' }}>{ht(timeH).toFixed(2)} m</strong> &nbsp; Range = {range.toFixed(1)} m
@@ -1251,20 +1251,20 @@ export default function App() {
  const wx = gx - tdx, wy = gy - tdy;
  const cts = toD(Math.atan2(wx, wy));
  const wsp = Math.sqrt(wx*wx + wy*wy);
- const W = 380, H = 280, ox = 130, oy = 200, sc = 10;
+ const W = 420, H = 300, ox = 140, oy = 210, sc = 10;
  const Arrow = ({x1,y1,x2,y2,color,label,dashed}) => {
  const dx=x2-x1, dy=y2-y1, len=Math.sqrt(dx*dx+dy*dy);
  if(len<2) return null;
  const ux=dx/len, uy=dy/len;
  const rawMid = {x:(x1+x2)/2, y:(y1+y2)/2};
- const mid = {x: Math.max(46, Math.min(334, rawMid.x)), y: Math.max(12, Math.min(268, rawMid.y))};
+ const mid = {x: Math.max(50, Math.min(370, rawMid.x)), y: Math.max(14, Math.min(286, rawMid.y))};
  const arrowSize = 9;
  return (
  <g>
  <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={dashed||''}/>
  <polygon points={`${x2},${y2} ${x2-arrowSize*ux+arrowSize*0.5*uy},${y2-arrowSize*uy-arrowSize*0.5*ux} ${x2-arrowSize*ux-arrowSize*0.5*uy},${y2-arrowSize*uy+arrowSize*0.5*ux}`} fill={color}/>
- <rect x={mid.x-44} y={mid.y-9} width="88" height="16" rx="3" fill={darkMode?"rgba(10,20,35,0.85)":"rgba(255,255,255,0.85)"} stroke="none"/>
- <text x={mid.x} y={mid.y+3} textAnchor="middle" fontSize="9.5" fill={color} fontWeight="bold" fontFamily="Arial">{label}</text>
+ <rect x={mid.x-48} y={mid.y-10} width="96" height="18" rx="4" fill={darkMode?"rgba(10,20,35,0.9)":"rgba(255,255,255,0.92)"} stroke={darkMode?"rgba(255,255,255,0.08)":"rgba(0,0,0,0.06)"} strokeWidth="0.5"/>
+ <text x={mid.x} y={mid.y+3} textAnchor="middle" fontSize="10" fill={color} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{label}</text>
  </g>
  );
  };
@@ -1485,7 +1485,7 @@ export default function App() {
  {/* Storm track arrow — pointing upward (poleward movement) */}
  <line x1={cx} y1={cy - R - 8} x2={cx} y2={cy - R - 38}
  stroke="#333" strokeWidth="2.5" markerEnd="url(#arrowBlackTRS)" />
- <text x={cx} y={cy - R - 44} textAnchor="middle" fontSize="10" fill="#444" fontWeight="bold">STORM TRACK (poleward)</text>
+ <text x={cx} y={cy - R - 44} textAnchor="middle" fontSize="11" fill="#333" fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">STORM TRACK (poleward)</text>
 
  {/* Dangerous semicircle — correct full half */}
  <path d={dangerPath} fill="#FF6B6B" opacity="0.20" />
@@ -1519,14 +1519,14 @@ export default function App() {
  stroke="#555" strokeWidth="1.5" strokeDasharray="6,3" />
 
  {/* Dangerous label */}
- <text x={dangerX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#B71C1C" fontWeight="bold">DANGEROUS</text>
- <text x={dangerX} y={cy - 4} textAnchor="middle" fontSize="10" fill="#B71C1C">SEMICIRCLE</text>
- <text x={dangerX} y={cy + 10} textAnchor="middle" fontSize="9" fill="#B71C1C">{isNH ? '(E — right of track)' : '(W — left of track)'}</text>
+ <text x={dangerX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#B71C1C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">DANGEROUS</text>
+ <text x={dangerX} y={cy - 3} textAnchor="middle" fontSize="10" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
+ <text x={dangerX} y={cy + 13} textAnchor="middle" fontSize="9.5" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(E — right of track)' : '(W — left of track)'}</text>
 
  {/* Navigable label */}
- <text x={navX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#1B5E20" fontWeight="bold">NAVIGABLE</text>
- <text x={navX} y={cy - 4} textAnchor="middle" fontSize="10" fill="#1B5E20">SEMICIRCLE</text>
- <text x={navX} y={cy + 10} textAnchor="middle" fontSize="9" fill="#1B5E20">{isNH ? '(W — left of track)' : '(E — right of track)'}</text>
+ <text x={navX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#1B5E20" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">NAVIGABLE</text>
+ <text x={navX} y={cy - 3} textAnchor="middle" fontSize="10" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
+ <text x={navX} y={cy + 13} textAnchor="middle" fontSize="9.5" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(W — left of track)' : '(E — right of track)'}</text>
 
  {/* Rotation direction */}
  <text x={cx} y={cy + R + 20} textAnchor="middle" fontSize="11" fill="#555">
@@ -1535,8 +1535,8 @@ export default function App() {
 
  {/* Buys Ballot box */}
  <rect x="10" y={cy + R + 30} width="480" height="40" rx="6" fill="#FFF3E0" stroke="#FF6F00" strokeWidth="1.5" />
- <text x="20" y={cy + R + 48} fontSize="10.5" fill="#E65100" fontWeight="bold">Buys Ballot's Law:</text>
- <text x="20" y={cy + R + 64} fontSize="10" fill="#333">
+ <text x="20" y={cy + R + 48} fontSize="11" fill="#E65100" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Buys Ballot's Law:</text>
+ <text x="20" y={cy + R + 64} fontSize="10.5" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif">
  {isNH ? 'Face the wind → storm centre is ~10° abaft your RIGHT hand'
  : 'Face the wind → storm centre is ~10° abaft your LEFT hand'}
  </text>
@@ -1606,7 +1606,7 @@ export default function App() {
  return (
  <g key={i}>
  <line x1={50} y1={y} x2={W-50} y2={y} stroke="#888" strokeWidth="1" strokeDasharray="3,3"/>
- <text x={46} y={y+4} textAnchor="end" fontSize="9.5" fill="#333">{b.lat}°</text>
+ <text x={46} y={y+4} textAnchor="end" fontSize="10" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="500">{b.lat}°</text>
  </g>
  );
  })}
@@ -1617,7 +1617,7 @@ export default function App() {
  const arrowChar = sys.dir === 'W' ? '→' : '←';
  return (
  <g key={i}>
- <text x={W/2} y={yMid+4} textAnchor="middle" fontSize="10.5" fill={sys.color} fontWeight="bold">
+ <text x={W/2} y={yMid+4} textAnchor="middle" fontSize="11" fill={sys.color} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.3">
  {arrowChar} {sys.name} {arrowChar}
  </text>
  </g>
@@ -1633,12 +1633,12 @@ export default function App() {
  {/* Rising at ITCZ, sinking at 30° */}
  <path d={`M ${W-60} ${latY(0)} Q ${W-40} ${latY(15)} ${W-60} ${latY(30)}`}
  fill="none" stroke="#E06C00" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.6"/>
- <text x={W-30} y={latY(15)+4} fontSize="8" fill="#E06C00" textAnchor="middle">Hadley</text>
+ <text x={W-30} y={latY(15)+4} fontSize="9" fill="#E06C00" textAnchor="middle" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">Hadley</text>
 
  {/* Title */}
- <text x={W/2} y={16} textAnchor="middle" fontSize="13" fill="#1B4F72" fontWeight="bold">Global Atmospheric Circulation</text>
- <text x={50} y={H-8} fontSize="9" fill="#666">← EAST</text>
- <text x={W-50} y={H-8} fontSize="9" fill="#666" textAnchor="end">WEST →</text>
+ <text x={W/2} y={16} textAnchor="middle" fontSize="14" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">Global Atmospheric Circulation</text>
+ <text x={50} y={H-8} fontSize="10" fill="#666" fontFamily="'Segoe UI',system-ui,sans-serif">← EAST</text>
+ <text x={W-50} y={H-8} fontSize="10" fill="#666" textAnchor="end" fontFamily="'Segoe UI',system-ui,sans-serif">WEST →</text>
  </svg>
  <p style={{textAlign:'center', fontSize:12, color:theme.textMuted, marginTop:4}}>
  🌍 Animated wind particles — showing trade winds, westerlies and polar easterlies
@@ -1701,19 +1701,19 @@ export default function App() {
  {/* Clouds: Ci, Cs, As, Ns from right to left */}
  {/* Ci - high, thin */}
  <ellipse cx={390} cy={55} rx={55} ry={12} fill="white" stroke="#aaa" strokeWidth="1" opacity="0.9"/>
- <text x={390} y={45} textAnchor="middle" fontSize="9" fill="#555">Ci</text>
+ <text x={390} y={43} textAnchor="middle" fontSize="10" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ci</text>
 
  {/* Cs */}
  <ellipse cx={300} cy={75} rx={50} ry={15} fill="white" stroke="#aaa" strokeWidth="1" opacity="0.9"/>
- <text x={300} y={65} textAnchor="middle" fontSize="9" fill="#555">Cs</text>
+ <text x={300} y={63} textAnchor="middle" fontSize="10" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cs</text>
 
  {/* As */}
  <ellipse cx={200} cy={100} rx={55} ry={20} fill="#B0BEC5" stroke="#777" strokeWidth="1" opacity="0.85"/>
- <text x={200} y={90} textAnchor="middle" fontSize="9" fill="#333">As</text>
+ <text x={200} y={88} textAnchor="middle" fontSize="10" fill="#333" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">As</text>
 
  {/* Ns — rain cloud */}
  <ellipse cx={100} cy={135} rx={60} ry={25} fill="#607D8B" stroke="#455A64" strokeWidth="1.5" opacity="0.9"/>
- <text x={100} y={125} textAnchor="middle" fontSize="9" fill="white">Ns</text>
+ <text x={100} y={123} textAnchor="middle" fontSize="10" fill="white" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ns</text>
 
  {/* Rain */}
  {rainDrops.slice(0,10).map((d,i) => (
@@ -1747,7 +1747,7 @@ export default function App() {
 
  {/* Anvil top */}
  <ellipse cx={275} cy={62} rx={65} ry={14} fill="#90A4AE" opacity="0.7"/>
- <text x={275} y={47} textAnchor="middle" fontSize="8" fill="#333">anvil top</text>
+ <text x={275} y={45} textAnchor="middle" fontSize="9.5" fill="#333" fontStyle="italic" fontFamily="'Segoe UI',system-ui,sans-serif">anvil top</text>
 
  {/* Cu ahead of cold front */}
  <ellipse cx={180} cy={150} rx={35} ry={18} fill="#B0BEC5" stroke="#777" strokeWidth="1" opacity="0.7"/>
@@ -1771,7 +1771,7 @@ export default function App() {
  )}
 
  {/* Title */}
- <text x={W/2} y={16} textAnchor="middle" fontSize="12" fill="#1B4F72" fontWeight="bold">
+ <text x={W/2} y={16} textAnchor="middle" fontSize="13" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">
  {isWarm ? 'WARM FRONT — Cross Section' : 'COLD FRONT — Cross Section'}
  </text>
  </svg>
@@ -1914,14 +1914,14 @@ export default function App() {
  const p = proj(lat, -90); const p2 = proj(lat, 30);
  return <g key={lat}>
  <line x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="0.5" opacity="0.6"/>
- <text x={35} y={p.y+4} textAnchor="end" fontSize="8" fill="#555">{lat}°N</text>
+ <text x={35} y={p.y+4} textAnchor="end" fontSize="9" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{lat}°N</text>
  </g>;
  })}
  {lonLines.map(lon => {
  const p = proj(70, lon); const p2 = proj(20, lon);
  return <g key={lon}>
  <line x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="0.5" opacity="0.6"/>
- <text x={p2.x} y={H-15} textAnchor="middle" fontSize="8" fill="#555">{Math.abs(lon)}{lon<0?'W':'E'}</text>
+ <text x={p2.x} y={H-18} textAnchor="middle" fontSize="9" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{Math.abs(lon)}{lon<0?'W':'E'}</text>
  </g>;
  })}
  {showRL && <path d={pathD(rlXY)} fill="none" stroke="#1565C0" strokeWidth="2.5" strokeDasharray="8,4"/>}
@@ -1931,13 +1931,13 @@ export default function App() {
  const p = proj(c.lat, c.lon);
  return <g key={c.label}>
  <circle cx={p.x} cy={p.y} r="6" fill="#FBC02D" stroke="#E65100" strokeWidth="1.5"/>
- <text x={p.x} y={p.y-10} textAnchor="middle" fontSize="8.5" fill="#333" fontWeight="bold">{c.label}</text>
+ <text x={p.x} y={p.y-12} textAnchor="middle" fontSize="10" fill="#333" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{c.label}</text>
  </g>;
  })}
  <text x={shipX} y={shipY} textAnchor="middle" dominantBaseline="middle" fontSize="16">🚢</text>
- {showGC && <text x={250} y={65} textAnchor="middle" fontSize="10" fill="#C62828" fontWeight="bold">Great Circle ≈ 3,000 nm (curves via higher latitudes)</text>}
- {showRL && <text x={250} y={80} textAnchor="middle" fontSize="10" fill="#1565C0" fontWeight="bold">Rhumb Line ≈ 3,150 nm (straight on Mercator, constant course)</text>}
- <text x={W/2} y={18} textAnchor="middle" fontSize="12" fill="#1B4F72" fontWeight="bold">London → New York: Great Circle vs Rhumb Line</text>
+ {showGC && <><rect x={80} y={54} width="340" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={66} textAnchor="middle" fontSize="10" fill="#C62828" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Great Circle ≈ 3,000 nm (curves via higher latitudes)</text></>}
+ {showRL && <><rect x={55} y={72} width="390" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={84} textAnchor="middle" fontSize="10" fill="#1565C0" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Rhumb Line ≈ 3,150 nm (straight on Mercator, constant course)</text></>}
+ <text x={W/2} y={18} textAnchor="middle" fontSize="13" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">London → New York: Great Circle vs Rhumb Line</text>
  </svg>
  <p style={{textAlign:'center', fontSize:11, color:theme.textMuted, marginTop:4}}>
  🌍 On a Mercator chart the great circle appears curved. On a gnomonic chart it appears straight. The rhumb line is shorter on the chart but longer in reality.
@@ -2000,7 +2000,7 @@ export default function App() {
  {rings.map((rg,i) => (
  <g key={i}>
  <circle cx={CX} cy={CY} r={rg.r} fill="none" stroke="#00ff0030" strokeWidth="1"/>
- <text x={CX+rg.r+2} y={CY-3} fontSize="7" fill="#00cc00" opacity="0.7">{rg.label}</text>
+ <text x={CX+rg.r+3} y={CY-4} fontSize="8.5" fill="#00cc00" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">{rg.label}</text>
  </g>
  ))}
  {[0,45,90,135,180,225,270,315].map(a => {
@@ -2009,7 +2009,7 @@ export default function App() {
  })}
  {['N','E','S','W'].map((c,i) => {
  const a = i*90*Math.PI/180;
- return <text key={c} x={CX+(R+10)*Math.sin(a)} y={CY-(R+10)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#00aa00">{c}</text>;
+ return <text key={c} x={CX+(R+12)*Math.sin(a)} y={CY-(R+12)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="#00cc00" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">{c}</text>;
  })}
  {(() => {
  const sweepA = (tick*3 % 360) * Math.PI/180;
@@ -2017,7 +2017,7 @@ export default function App() {
  })()}
  {trail.map((p,i) => <circle key={i} cx={p.x} cy={p.y} r={2+i*0.4} fill="#00ff00" opacity={(i+1)*0.15}/>)}
  <circle cx={px(tgtX)} cy={py(tgtY)} r="5" fill="#00ff00" opacity="0.9"/>
- <text x={px(tgtX)+7} y={py(tgtY)-4} fontSize="8" fill="#00ff00">T1</text>
+ <text x={px(tgtX)+8} y={py(tgtY)-6} fontSize="9" fill="#00ff00" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">T1</text>
  {cpa < range && <circle cx={px(cpaX)} cy={py(cpaY)} r="4" fill="none" stroke="#ff4444" strokeWidth="1.5" strokeDasharray="3,2"/>}
  <circle cx={CX} cy={CY} r="5" fill="#ffffff"/>
  <line x1={CX} y1={CY} x2={CX} y2={CY-15} stroke="#ffffff" strokeWidth="2"/>
@@ -4623,24 +4623,27 @@ export default function App() {
  <line x1={px} y1={py} x2={zx} y2={zy} stroke="#E67E22" strokeWidth="2.5" />
  <line x1={zx} y1={zy} x2={bx} y2={by} stroke="#E74C3C" strokeWidth="2.5" />
  <line x1={px} y1={py} x2={bx} y2={by} stroke="#2ECC71" strokeWidth="2.5" />
- <text x={(px + zx) / 2 - 48} y={(py + zy) / 2 + 4} fontSize="9" fill="#E67E22" fontWeight="bold">PZ=90°−Lat</text>
- <text x={(zx + bx) / 2 + 6} y={(zy + by) / 2} fontSize="9" fill="#E74C3C" fontWeight="bold">ZX=90°−Ho</text>
- <text x={(px + bx) / 2 + 4} y={(py + by) / 2 - 4} fontSize="9" fill="#2ECC71" fontWeight="bold">PX=90°−Dec</text>
+ <rect x={(px + zx) / 2 - 50} y={(py + zy) / 2 - 8} width="80" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
+ <text x={(px + zx) / 2 - 10} y={(py + zy) / 2 + 4} textAnchor="middle" fontSize="9.5" fill="#E67E22" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">PZ=90°−Lat</text>
+ <rect x={(zx + bx) / 2 + 4} y={(zy + by) / 2 - 12} width="76" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
+ <text x={(zx + bx) / 2 + 42} y={(zy + by) / 2} textAnchor="middle" fontSize="9.5" fill="#E74C3C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">ZX=90°−Ho</text>
+ <rect x={(px + bx) / 2 + 2} y={(py + by) / 2 - 16} width="80" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
+ <text x={(px + bx) / 2 + 42} y={(py + by) / 2 - 4} textAnchor="middle" fontSize="9.5" fill="#2ECC71" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">PX=90°−Dec</text>
  <text x={px + 8} y={py + 20} fontSize="10" fill="#F4D03F" fontWeight="bold">∠P=LHA</text>
  <text x={zx - 58} y={zy + 20} fontSize="10" fill="#F4D03F" fontWeight="bold">∠Z=Az</text>
  </>
  )}
  <circle cx={px} cy={py} r="7" fill="#E74C3C" />
- <text x={px + 10} y={py + 5} fontSize="15" fontWeight="bold" fill="#E74C3C">P</text>
- <text x={px - 6} y={py - 10} fontSize="9" fill="#E74C3C">N.Pole</text>
+ <text x={px + 10} y={py + 5} fontSize="13" fontWeight="bold" fill="#E74C3C" fontFamily="'Segoe UI',system-ui,sans-serif">P</text>
+ <text x={px - 6} y={py - 12} fontSize="9.5" fill="#E74C3C" fontFamily="'Segoe UI',system-ui,sans-serif">N.Pole</text>
  <circle cx={zx} cy={zy} r="7" fill="#F39C12" />
- <text x={zx + 10} y={zy + 5} fontSize="15" fontWeight="bold" fill="#F39C12">Z</text>
- <text x={zx - 42} y={zy - 10} fontSize="9" fill="#F39C12">Zenith</text>
+ <text x={zx + 10} y={zy + 5} fontSize="13" fontWeight="bold" fill="#F39C12" fontFamily="'Segoe UI',system-ui,sans-serif">Z</text>
+ <text x={zx - 42} y={zy - 12} fontSize="9.5" fill="#F39C12" fontFamily="'Segoe UI',system-ui,sans-serif">Zenith</text>
  <text x={zx - 6} y={zy + 80} fontSize="13" textAnchor="middle" fill="#7EC8E3">⛵</text>
  <circle cx={bx} cy={by} r="13" fill="#F4D03F" stroke="#F39C12" strokeWidth="2.5" />
  <circle cx={bx - 3} cy={by - 3} r="4" fill="rgba(255,255,255,0.5)" />
- <text x={bx + 17} y={by + 4} fontSize="15" fontWeight="bold" fill="#F4D03F">X</text>
- <text x={bx + 17} y={by + 18} fontSize="9" fill="#F4D03F">Sun</text>
+ <text x={bx + 17} y={by + 4} fontSize="13" fontWeight="bold" fill="#F4D03F" fontFamily="'Segoe UI',system-ui,sans-serif">X</text>
+ <text x={bx + 17} y={by + 18} fontSize="9.5" fill="#F4D03F" fontFamily="'Segoe UI',system-ui,sans-serif">Sun</text>
  <text x="230" y="20" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#7EC8E3">The Celestial Sphere</text>
  </svg>
  <div style={{ background: 'rgba(74,111,165,0.2)', border: '1px solid #2A4A7F', borderRadius: 6, padding: '7px 10px', fontSize: 11, color: '#b8d4f0', lineHeight: 1.5, marginTop: 4, minHeight: 44 }}>
@@ -10772,10 +10775,10 @@ export default function App() {
  {/* Force gauge bar on right */}
  <rect x="430" y="10" width="18" height="180" rx="4" fill="#1a2a3a" />
  <rect x="430" y={10 + 180 - (force / 12) * 180} width="18" height={(force / 12) * 180} rx="4" fill={barColor} />
- <text x="439" y="8" textAnchor="middle" fontSize="9" fill="#90caf9">F{force}</text>
+ <text x="439" y="8" textAnchor="middle" fontSize="9.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F{force}</text>
  {/* Scale ticks */}
  {[0,3,6,9,12].map(f => (
- <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="7.5" fill="#546e7a">{f}</text>
+ <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="8.5" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{f}</text>
  ))}
  {/* Horizon line label */}
  <text x="8" y="105" fontSize="9" fill="#90caf9" opacity="0.6">sea level</text>
@@ -10864,7 +10867,7 @@ export default function App() {
  <rect x="0" y="0" width="560" height="295" fill="url(#csBg)" />
  <rect x="0" y="295" width="560" height="25" fill="#0d3a5e" />
  <line x1="0" y1="295" x2="560" y2="295" stroke="#1e88e5" strokeWidth="1.5" strokeDasharray="10,5" opacity="0.7" />
- <text x="10" y="308" fontSize="9" fill="#1e88e5" opacity="0.7">waterline</text>
+ <text x="10" y="306" fontSize="9.5" fill="#1e88e5" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">waterline</text>
  <path d="M 110,80 L 110,240 Q 112,265 135,278 Q 175,292 280,295 Q 385,292 425,278 Q 448,265 450,240 L 450,80"
  stroke="#607d8b" strokeWidth="3" fill="#0d1f30" />
  <path d="M 148,228 L 162,250 Q 210,262 280,265 Q 350,262 398,250 L 412,228
@@ -10875,8 +10878,8 @@ export default function App() {
  <path d="M 450,178 L 412,228 L 405,195 Z" fill="#1a4a50" stroke="#26C6DA" strokeWidth="1.5" opacity="0.9" />
  <path d="M 110,80 L 110,175 L 155,175 L 155,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
  <path d="M 450,80 L 450,175 L 405,175 L 405,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
- <text x="127" y="138" textAnchor="middle" fontSize="7" fill="#81C784" transform="rotate(-72,127,138)">TOPSIDE</text>
- <text x="433" y="138" textAnchor="middle" fontSize="7" fill="#81C784" transform="rotate(72,433,138)">TOPSIDE</text>
+ <text x="127" y="138" textAnchor="middle" fontSize="8" fill="#81C784" transform="rotate(-72,127,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
+ <text x="433" y="138" textAnchor="middle" fontSize="8" fill="#81C784" transform="rotate(72,433,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
  <rect x="155" y="105" width="250" height="123" fill="#0a1c2c" />
  <line x1="155" y1="195" x2="155" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
  <line x1="405" y1="195" x2="405" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
@@ -10976,9 +10979,9 @@ export default function App() {
  <line x1="448" y1="34" x2="472" y2="34" stroke="#78909C" strokeWidth="1.5" />
  <ellipse cx="460" cy="20" rx="7" ry="3" fill="none" stroke="#90caf9" strokeWidth="1.5" />
  <line x1="100" y1="83" x2="440" y2="81" stroke="#607d8b" strokeWidth="1.5" strokeDasharray="6,3" opacity="0.5" />
- <text x="78" y="18" textAnchor="middle" fontSize="8.5" fill="#ef9a9a" fontWeight="600">Bridge/Accomm</text>
- <text x="290" y="73" textAnchor="middle" fontSize="8.5" fill="#FFB74D" fontWeight="600">Cargo Holds (5)</text>
- <text x="486" y="57" textAnchor="middle" fontSize="8.5" fill="#A5D6A7" fontWeight="600">F'c'sle</text>
+ <text x="78" y="18" textAnchor="middle" fontSize="9" fill="#ef9a9a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Bridge/Accomm</text>
+ <text x="290" y="73" textAnchor="middle" fontSize="9" fill="#FFB74D" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cargo Holds (5)</text>
+ <text x="470" y="57" textAnchor="middle" fontSize="9" fill="#A5D6A7" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F'c'sle</text>
  <text x="558" y="208" fontSize="8" fill="#ef9a9a" fontWeight="600">A/F</text>
  {profileSpots.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
@@ -10998,8 +11001,8 @@ export default function App() {
  <rect x="62" y="65" width="85" height="70" fill="#253545" stroke="#546e7a" strokeWidth="2" rx="3" />
  <rect x="57" y="60" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
  <rect x="57" y="128" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
- <text x="104" y="103" textAnchor="middle" fontSize="8" fill="#90caf9" fontWeight="600">ACCOMM</text>
- <text x="104" y="114" textAnchor="middle" fontSize="7.5" fill="#546e7a">+ BRIDGE</text>
+ <text x="104" y="101" textAnchor="middle" fontSize="8.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">ACCOMM</text>
+ <text x="104" y="116" textAnchor="middle" fontSize="8" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">+ BRIDGE</text>
  <ellipse cx="84" cy="100" rx="10" ry="12" fill="#37474f" stroke="#607d8b" strokeWidth="1.5" />
  {[155,233,311,389,455].map((x, i) => (
  <g key={"ph"+i}>
@@ -11017,7 +11020,7 @@ export default function App() {
  <ellipse cx="541" cy="74" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <ellipse cx="541" cy="126" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <circle cx="505" cy="100" r="4" fill="#78909C" stroke="#90a4ae" strokeWidth="1.5" />
- <text x="505" y="116" textAnchor="middle" fontSize="7.5" fill="#78909C">MAST</text>
+ <text x="505" y="116" textAnchor="middle" fontSize="8.5" fill="#78909C" fontFamily="'Segoe UI',system-ui,sans-serif">MAST</text>
  {[72,128].map((y, i) => (
  <rect key={"sb"+i} x="66" y={y} width="6" height="6" fill="#546e7a" rx="1" />
  ))}
@@ -11331,7 +11334,7 @@ export default function App() {
 
  {/* Course line */}
  <line x1={10} y1={courseY} x2={470} y2={courseY} stroke={darkMode ? '#6688aa' : '#336'} strokeWidth={2} />
- <text x={460} y={courseY + 16} textAnchor="end" fontSize={10} fill={darkMode ? '#8899aa' : '#555'} fontWeight="bold">Course (heading E)</text>
+ <text x={440} y={courseY + 16} textAnchor="end" fontSize={10} fill={darkMode ? '#8899aa' : '#555'} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Course (heading E)</text>
  {/* Arrow on course line */}
  <polygon points={`466,${courseY} 456,${courseY - 4} 456,${courseY + 4}`} fill={darkMode ? '#6688aa' : '#336'} />
 
@@ -11755,7 +11758,7 @@ export default function App() {
 
  {/* Course line (faint, extends across) */}
  <line x1={10} y1={shipY} x2={470} y2={shipY} stroke={darkMode ? '#445566' : '#aab'} strokeWidth={1} strokeDasharray="4,4" />
- <text x={460} y={shipY + 14} textAnchor="end" fontSize={9} fill={darkMode ? '#667788' : '#888'}>Course steered (E)</text>
+ <text x={440} y={shipY + 14} textAnchor="end" fontSize={9.5} fill={darkMode ? '#778899' : '#777'} fontFamily="'Segoe UI',system-ui,sans-serif">Course steered (E)</text>
 
  {/* Lighthouse */}
  <polygon points={`${lhX},${lhY - 18} ${lhX - 8},${lhY} ${lhX + 8},${lhY}`} fill="#8B4513" stroke={darkMode ? '#aa7733' : '#333'} strokeWidth={1} />
@@ -11948,9 +11951,9 @@ export default function App() {
  )}
  {st.showReduceSpeed && (
  <g>
- <rect x="340" y="28" width="126" height="42" rx="7" fill="#1a2a3a" stroke="#FFA000" strokeWidth="1.5" opacity="0.95"/>
- <text x="403" y="48" textAnchor="middle" fontSize="11" fontWeight="800" fill="#FFA000">REDUCE SPEED</text>
- <text x="403" y="62" textAnchor="middle" fontSize="9" fill="#ccc">stop if necessary</text>
+ <rect x="330" y="28" width="136" height="42" rx="7" fill="#1a2a3a" stroke="#FFA000" strokeWidth="1.5" opacity="0.95"/>
+ <text x="398" y="48" textAnchor="middle" fontSize="11" fontWeight="800" fill="#FFA000" fontFamily="'Segoe UI',system-ui,sans-serif">REDUCE SPEED</text>
+ <text x="398" y="62" textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="'Segoe UI',system-ui,sans-serif">stop if necessary</text>
  <rect x="345" y="74" width="116" height="7" rx="2" fill="#333" opacity="0.8"/>
  <rect x="345" y="74" width="42" height="7" rx="2" fill="#FFA000" opacity="0.85"><animate attributeName="width" values="116;42;42" dur="0.8s" fill="freeze"/></rect>
  </g>
@@ -11961,8 +11964,8 @@ export default function App() {
  <circle cx={cx-60} cy={cy-51} r="15" fill="#E53935" opacity="0.15"/>
  <line x1={cx-71} y1={cy-62} x2={cx-49} y2={cy-40} stroke="#E53935" strokeWidth="3" opacity="0.9"/>
  <line x1={cx-49} y1={cy-62} x2={cx-71} y2={cy-40} stroke="#E53935" strokeWidth="3" opacity="0.9"/>
- <text x={cx-95} y={cy-72} fontSize="9" fontWeight="700" fill="#E53935">DO NOT ALTER</text>
- <text x={cx-90} y={cy-62} fontSize="9" fontWeight="700" fill="#E53935">TO PORT</text>
+ <text x={cx-95} y={cy-74} fontSize="9.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">DO NOT ALTER</text>
+ <text x={cx-90} y={cy-60} fontSize="9.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">TO PORT</text>
  </g>
  )}
  {st.showStbdOk && (
@@ -12053,10 +12056,10 @@ export default function App() {
  {Array.from({length: cycleLen === 60 ? 7 : 13}, (_, i) => {
  const sec = i * (cycleLen / (cycleLen === 60 ? 6 : 12));
  const x = toX(sec);
- return (<g key={i}><line x1={x} y1={TL_Y+BAR_H+8} x2={x} y2={TL_Y+BAR_H+15} stroke="#2a3a4a" strokeWidth="1"/><text x={x} y={TL_Y+BAR_H+26} textAnchor="middle" fontSize="8" fill="#546e7a">{sec < 60 ? `${sec}s` : `${sec/60}m`}</text></g>);
+ return (<g key={i}><line x1={x} y1={TL_Y+BAR_H+8} x2={x} y2={TL_Y+BAR_H+15} stroke="#2a3a4a" strokeWidth="1"/><text x={x} y={TL_Y+BAR_H+26} textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{sec < 60 ? `${sec}s` : `${sec/60}m`}</text></g>);
  })}
  <text x={TL_X+TL_W/2} y={TL_Y+BAR_H+40} textAnchor="middle" fontSize="9" fill="#546e7a">— {cycleLen === 60 ? "1 minute cycle (anchor/aground)" : "2 minute cycle (Rule 35)"} —</text>
- <text x={TL_X-4} y={TL_Y+BAR_H/2+4} textAnchor="end" fontSize="8" fill="#546e7a">SIG</text>
+ <text x={TL_X-4} y={TL_Y+BAR_H/2+4} textAnchor="end" fontSize="9" fill="#546e7a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">SIG</text>
  {v.blasts.map((b, i) => {
  const bx = toX(b.t), bw = toW(b.dur);
  const isActive = i === activeBlastIdx && playing;
@@ -12066,8 +12069,8 @@ export default function App() {
  <rect x={bx} y={TL_Y} width={bw} height={BAR_H} rx="3" fill={col} opacity={isActive ? 1 : 0.72} stroke={isActive ? "#fff" : col} strokeWidth={isActive ? 1.5 : 0.5}/>
  {isActive && <rect x={bx-2} y={TL_Y-2} width={bw+4} height={BAR_H+4} rx="4" fill="none" stroke={col} strokeWidth="2" opacity="0.5"><animate attributeName="opacity" values="0.5;0;0.5" dur="0.6s" repeatCount="indefinite"/></rect>}
  <text x={bx+bw/2} y={TL_Y+BAR_H/2+4} textAnchor="middle" fontSize={bw>22?"9":"7"} fontWeight="700" fill="#fff" opacity="0.92">{b.label}</text>
- <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="7" fill="#78909c">{b.dur}s</text>
- <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="7" fill={col} opacity="0.8">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
+ <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="8" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{b.dur}s</text>
+ <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="8" fill={col} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
  </g>
  );
  })}
@@ -12075,15 +12078,15 @@ export default function App() {
  {playing && activeBlastIdx >= 0 && (
  <g>
  {[0,1,2,3].map(i => { const r = ((pulsePhase+i*15)%60); const col = blastColor(v.blasts[activeBlastIdx].type); return <circle key={i} cx="450" cy="72" r={r} fill="none" stroke={col} strokeWidth={Math.max(0.3,2.5-r/24)} opacity={Math.max(0,0.85-r/60)}/>; })}
- <text x="450" y="152" textAnchor="middle" fontSize="8" fill={v.color} fontWeight="700">SOUND</text>
- <text x="450" y="163" textAnchor="middle" fontSize="7" fill="#78909c">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
+ <text x="450" y="152" textAnchor="middle" fontSize="9" fill={v.color} fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif">SOUND</text>
+ <text x="450" y="163" textAnchor="middle" fontSize="8" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
  </g>
  )}
  {(!playing || activeBlastIdx < 0) && (
  <g>
  <circle cx="450" cy="72" r="20" fill="#1a2a3a" stroke="#2a3a4a" strokeWidth="1"/>
  <text x="450" y="76" textAnchor="middle" fontSize="10" fill="#546e7a">—</text>
- <text x="450" y="152" textAnchor="middle" fontSize="8" fill="#546e7a">SILENT</text>
+ <text x="450" y="152" textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">SILENT</text>
  </g>
  )}
  {playing && <text x={TL_X+TL_W+5} y={TL_Y+BAR_H/2+4} fontSize="9" fill="#90caf9">{(playhead*cycleLen).toFixed(1)}s</text>}
@@ -12379,7 +12382,7 @@ export default function App() {
  <path d={usedStbdPath} fill="none" stroke={STBD_COL} strokeWidth="2.5" opacity="0.9" />
 
  {/* Channel direction label */}
- <text x="178" y="355" textAnchor="middle" fontSize="10" fill="#546e7a">↑ Up-channel</text>
+ <text x="178" y="340" textAnchor="middle" fontSize="10" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">↑ Up-channel</text>
 
  {/* Step title in SVG */}
  <text x="200" y="22" textAnchor="middle" fontSize="12" fontWeight="800" fill={GOLD}>{st.rule}</text>
