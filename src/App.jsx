@@ -456,6 +456,12 @@ export default function App() {
  const session = localAuth.getSession();
  setCurrentUser(session);
  setAuthLoading(false);
+ // One-time sync: push all local users (with passwordHash) to Firestore
+ // This ensures existing accounts get their passwordHash synced for cross-device login
+ const users = getStoredUsers();
+ Object.values(users).forEach(u => {
+   if (u.email && u.passwordHash) syncUserToFirestore(u);
+ });
  }, []);
 
  const isAdmin = currentUser?.email === ADMIN_EMAIL;
