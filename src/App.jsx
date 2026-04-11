@@ -1159,7 +1159,7 @@ export default function App() {
  <g key={label}>
  <line x1={cx} y1={cy} x2={x2} y2={y2} stroke={color} strokeWidth="3" strokeLinecap="round" strokeDasharray={dasharray || ''} style={{ transition: 'all 0.35s ease', transformOrigin: `${cx}px ${cy}px` }}/>
  <polygon points={`${x2},${y2} ${ax},${ay} ${bx},${by}`} fill={color} style={{ transition: 'all 0.35s ease' }}/>
- <text x={cx + (len + 10) * Math.sin(deg * Math.PI / 180)} y={cy - (len + 10) * Math.cos(deg * Math.PI / 180)} textAnchor="middle" dominantBaseline="middle" fill={color} fontSize="11" fontWeight="bold" fontFamily="Arial">{label}</text>
+ <text x={cx + (len + 10) * Math.sin(deg * Math.PI / 180)} y={cy - (len + 10) * Math.cos(deg * Math.PI / 180)} textAnchor="middle" dominantBaseline="middle" fill={color} fontSize="11" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{label}</text>
  </g>
  );
  };
@@ -1175,7 +1175,7 @@ export default function App() {
  return <line key={i} x1={cx + (r-2)*Math.sin(a)} y1={cy-(r-2)*Math.cos(a)} x2={cx+(ism?r-14:r-7)*Math.sin(a)} y2={cy-(ism?r-14:r-7)*Math.cos(a)} stroke="rgba(255,255,255,0.35)" strokeWidth={ism?2:1}/>;
  })}
  {[['N',0],['E',90],['S',180],['W',270]].map(([l,d]) => (
- <text key={l} x={cx+(r-20)*Math.sin(d*Math.PI/180)} y={cy-(r-20)*Math.cos(d*Math.PI/180)+4} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold" fontFamily="Arial">{l}</text>
+ <text key={l} x={cx+(r-20)*Math.sin(d*Math.PI/180)} y={cy-(r-20)*Math.cos(d*Math.PI/180)+4} textAnchor="middle" fill="white" fontSize="12" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{l}</text>
  ))}
  {needle(trueBearing, r-10, '#E74C3C', 'T', '')}
  {needle(magnetic, r-22, '#F39C12', 'M', '6,3')}
@@ -1246,7 +1246,7 @@ export default function App() {
  <line x1={cx} y1={pT} x2={cx} y2={pT+ph} stroke="#E74C3C" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.7"/>
  <circle cx={cx} cy={cy} r="7" fill="#E74C3C" stroke="white" strokeWidth="2"/>
  <rect x={Math.min(cx+10, W-82)} y={cy-14} width="78" height="18" rx="4" fill={darkMode?"#112a45":"white"} stroke={theme.border} strokeWidth="1"/>
- <text x={Math.min(cx+49, W-43)} y={cy+2} textAnchor="middle" fontSize="10" fill="#E74C3C" fontWeight="bold" fontFamily="Arial">{ht(timeH).toFixed(2)} m</text>
+ <text x={Math.min(cx+49, W-43)} y={cy+2} textAnchor="middle" fontSize="10" fill="#E74C3C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{ht(timeH).toFixed(2)} m</text>
  {rotLabels.map(([l, t]) => {
  const mx = tx(t), mh = ht(t);
  return <text key={l} x={mx} y={ty(mh)-8} textAnchor="middle" fontSize="9" fill={darkMode?"#AAA":"#555"} fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="500">{l}</text>;
@@ -1298,7 +1298,7 @@ export default function App() {
  <div>
  <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
  <rect width={W} height={H} fill={darkMode?"#0a1628":"#F8FAFF"} rx="6"/>
- <text x="22" y="22" fontSize="11" fill={theme.textMuted} fontWeight="bold" fontFamily="Arial">↑N</text>
+ <text x="22" y="22" fontSize="11" fill={theme.textMuted} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">↑N</text>
  {Array.from({length:8},(_,i)=>[30+i*50,30+i*50]).flat().map((v,i)=> i<8 ? <line key={'v'+i} x1={v} y1={20} x2={v} y2={H-20} stroke={darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)"} strokeWidth="1"/> : <line key={'h'+i} x1={20} y1={v} x2={W-20} y2={v} stroke={darkMode?"rgba(255,255,255,0.04)":"rgba(0,0,0,0.04)"} strokeWidth="1"/>)}
  <Arrow x1={ox} y1={oy} x2={wx_end} y2={wy_end} color="#4A6FA5" label={`CTS: ${Math.round(cts)}°T (${wsp.toFixed(1)}kn)`}/>
  <Arrow x1={wx_end} y1={wy_end} x2={td_end.x} y2={td_end.y} color="#27AE60" label={`Tide: ${tideSet}° / ${tideRate}kn`}/>
@@ -1363,7 +1363,7 @@ export default function App() {
  })}
  {/* Cardinal labels */}
  {compassPoints.map(([l,d])=>(
- <text key={l} x={ptOnCircle(d,r-18).x} y={ptOnCircle(d,r-18).y+4} textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize="10" fontWeight="bold" fontFamily="Arial">{l}</text>
+ <text key={l} x={ptOnCircle(d,r-18).x} y={ptOnCircle(d,r-18).y+4} textAnchor="middle" fill="rgba(255,255,255,0.85)" fontSize="10" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{l}</text>
  ))}
  {/* Horizon line */}
  <line x1={cx-r+5} y1={cy} x2={cx+r-5} y2={cy} stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="4,4"/>
@@ -1373,17 +1373,17 @@ export default function App() {
  {/* Sunrise bearing */}
  <line x1={cx} y1={cy} x2={ptOnCircle(sunriseBearing,r-8).x} y2={ptOnCircle(sunriseBearing,r-8).y} stroke="#F39C12" strokeWidth="3" strokeLinecap="round"/>
  <circle cx={ptOnCircle(sunriseBearing,r-8).x} cy={ptOnCircle(sunriseBearing,r-8).y} r="6" fill="#F39C12"/>
- <text x={ptOnCircle(sunriseBearing,r+16).x} y={ptOnCircle(sunriseBearing,r+16).y+4} textAnchor="middle" fill="#F39C12" fontSize="10" fontWeight="bold" fontFamily="Arial">☀R</text>
+ <text x={ptOnCircle(sunriseBearing,r+16).x} y={ptOnCircle(sunriseBearing,r+16).y+4} textAnchor="middle" fill="#F39C12" fontSize="10" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">☀R</text>
  {/* Sunset bearing */}
  <line x1={cx} y1={cy} x2={ptOnCircle(sunsetBearing,r-8).x} y2={ptOnCircle(sunsetBearing,r-8).y} stroke="#E67E22" strokeWidth="3" strokeLinecap="round"/>
  <circle cx={ptOnCircle(sunsetBearing,r-8).x} cy={ptOnCircle(sunsetBearing,r-8).y} r="6" fill="#E67E22"/>
- <text x={ptOnCircle(sunsetBearing,r+16).x} y={ptOnCircle(sunsetBearing,r+16).y+4} textAnchor="middle" fill="#E67E22" fontSize="10" fontWeight="bold" fontFamily="Arial">☀S</text>
+ <text x={ptOnCircle(sunsetBearing,r+16).x} y={ptOnCircle(sunsetBearing,r+16).y+4} textAnchor="middle" fill="#E67E22" fontSize="10" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">☀S</text>
  {/* Amplitude arc label */}
- <text x={ptOnCircle(90,r-28).x} y={ptOnCircle(90,r-28).y+4} textAnchor="middle" fill="#F1C40F" fontSize="9" fontFamily="Arial">A={amplitude}°</text>
+ <text x={ptOnCircle(90,r-28).x} y={ptOnCircle(90,r-28).y+4} textAnchor="middle" fill="#F1C40F" fontSize="9" fontFamily="'Segoe UI',system-ui,sans-serif">A={amplitude}°</text>
  </>
  )}
  {amplitude === null && (
- <text x={cx} y={cy+20} textAnchor="middle" fill="#E74C3C" fontSize="11" fontFamily="Arial">Body never rises</text>
+ <text x={cx} y={cy+20} textAnchor="middle" fill="#E74C3C" fontSize="11" fontFamily="'Segoe UI',system-ui,sans-serif">Body never rises</text>
  )}
  {/* North line */}
  <line x1={cx} y1={cy} x2={cx} y2={cy-r+8} stroke="#E74C3C" strokeWidth="2" strokeDasharray="6,3"/>
@@ -1658,8 +1658,8 @@ export default function App() {
 
  {/* Title */}
  <text x={W/2} y={16} textAnchor="middle" fontSize="14" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">Global Atmospheric Circulation</text>
- <text x={50} y={H-8} fontSize="10" fill="#666" fontFamily="'Segoe UI',system-ui,sans-serif">← EAST</text>
- <text x={W-50} y={H-8} fontSize="10" fill="#666" textAnchor="end" fontFamily="'Segoe UI',system-ui,sans-serif">WEST →</text>
+ <text x={50} y={H-16} fontSize="10" fill="#666" fontFamily="'Segoe UI',system-ui,sans-serif">← EAST</text>
+ <text x={W-50} y={H-16} fontSize="10" fill="#666" textAnchor="end" fontFamily="'Segoe UI',system-ui,sans-serif">WEST →</text>
  </svg>
  <p style={{textAlign:'center', fontSize:12, color:theme.textMuted, marginTop:4}}>
  🌍 Animated wind particles — showing trade winds, westerlies and polar easterlies
@@ -1866,7 +1866,7 @@ export default function App() {
  {compassRose(250, 110, 85, 'MAGNETIC', magHdg, '#1D9E75')}
  {compassRose(410, 110, 85, 'COMPASS', compHdg, '#E24B4A')}
  <rect x="10" y="205" width="480" height="24" rx="6" fill="#1B4F72" opacity="0.9"/>
- <text x="250" y="221" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold" fontFamily="monospace">
+ <text x="250" y="221" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">
  T {norm(trueHdg).toString().padStart(3,'0')}° {variation>=0?'+'+variation+'W':variation+'E'} Var → M {norm(magHdg).toString().padStart(3,'0')}° {deviation>=0?'+'+deviation+'W':Math.abs(deviation)+'E'} Dev → C {norm(compHdg).toString().padStart(3,'0')}°
  </text>
  </svg>
@@ -2021,7 +2021,7 @@ export default function App() {
  {rings.map((rg,i) => (
  <g key={i}>
  <circle cx={CX} cy={CY} r={rg.r} fill="none" stroke="#00ff0030" strokeWidth="1"/>
- <text x={CX+rg.r+3} y={CY-4} fontSize="8.5" fill="#00cc00" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">{rg.label}</text>
+ <text x={CX+rg.r+3} y={CY-4} fontSize="10" fill="#00cc00" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">{rg.label}</text>
  </g>
  ))}
  {[0,45,90,135,180,225,270,315].map(a => {
@@ -3680,7 +3680,7 @@ export default function App() {
  </g>
  ))}
  {/* Axis labels */}
- <text x={padL+chartW/2} y={H-5} fontSize={11} textAnchor="middle" fill="#333">Angle of Heel (°)</text>
+ <text x={padL+chartW/2} y={H-14} fontSize={11} textAnchor="middle" fill="#333">Angle of Heel (°)</text>
  <text x={12} y={padT+chartH/2} fontSize={11} textAnchor="middle" fill="#333" transform={`rotate(-90,12,${padT+chartH/2})`}>GZ (m)</text>
  {/* GZ Curve */}
  {step >= 1 && <path d={pathD} fill="none" stroke="#1A3A6B" strokeWidth={2.5}/>}
@@ -4700,7 +4700,7 @@ export default function App() {
  return (
  <div style={{ background: '#0d1b2a', borderRadius: 10, padding: 10, fontFamily: 'Arial,sans-serif', color: '#fff' }}>
  <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: '#7EC8E3', marginBottom: 4 }}>PZX Triangle — Step-by-Step Builder</div>
- <svg viewBox="0 0 460 370" style={{ width: '100%', display: 'block' }}>
+ <svg viewBox="0 0 460 380" style={{ width: '100%', display: 'block' }}>
  <rect width="460" height="370" fill="#0d1b2a" />
  {[31, 67, 101, 139, 173, 211, 251, 283, 317, 347, 383, 419, 23, 59, 97, 131, 167, 199, 241, 271, 307].map((n, i) => (
  <circle key={i} cx={n % 458} cy={(n * 11 + 17) % 365} r={i % 4 === 0 ? 1.2 : 0.7} fill="white" fillOpacity={0.1 + (i % 6) * 0.06} />
@@ -4842,23 +4842,23 @@ export default function App() {
  <line x1={sunX} y1={sunY + 24} x2={gpX} y2={gpY} stroke="#F4D03F" strokeWidth="1.5" strokeDasharray="4,3" />
  <circle cx={gpX} cy={gpY} r="6" fill="#F4D03F" stroke="#CA6F1E" strokeWidth="2" />
  <text x={gpX + 9} y={gpY - 7} fontSize="10" fill="#F4D03F" fontWeight="bold">GP</text>
- <text x={gpX + 9} y={gpY + 7} fontSize="8.5" fill="#F4D03F">subsolar point</text>
+ <text x={gpX + 9} y={gpY + 7} fontSize="10" fill="#F4D03F">subsolar point</text>
  {(view === 'altitude' || view === 'circle' || view === 'fix') && (
  <>
  <circle cx={obsX} cy={obsY} r="5" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
  <text x={obsX - 8} y={obsY - 12} fontSize="9" fill="#7EC8E3" fontWeight="bold">Observer ⛵</text>
  <line x1={obsX - 48} y1={obsY + 6} x2={obsX + 48} y2={obsY - 4} stroke="#2ECC71" strokeWidth="1.5" strokeDasharray="4,3" />
- <text x={obsX - 50} y={obsY + 18} fontSize="8.5" fill="#2ECC71">Horizon</text>
+ <text x={obsX - 50} y={obsY + 18} fontSize="10" fill="#2ECC71">Horizon</text>
  <line x1={obsX} y1={obsY} x2={sunX} y2={sunY} stroke="#E74C3C" strokeWidth="2.5" />
  <text x={(obsX + sunX) / 2 - 18} y={(obsY + sunY) / 2 - 5} fontSize="10" fill="#E74C3C" fontWeight="bold">Ho</text>
- <text x={(obsX + sunX) / 2 - 8} y={(obsY + sunY) / 2 + 8} fontSize="8.5" fill="#E74C3C">(altitude)</text>
+ <text x={(obsX + sunX) / 2 - 8} y={(obsY + sunY) / 2 + 8} fontSize="10" fill="#E74C3C">(altitude)</text>
  </>
  )}
  {(view === 'circle' || view === 'fix') && (
  <>
  <ellipse cx={gpX} cy={gpY + 2} rx="58" ry="19" fill="none" stroke="#E74C3C" strokeWidth="2.5" strokeDasharray="7,4" />
  <text x={gpX} y={gpY + 30} textAnchor="middle" fontSize="9.5" fill="#E74C3C" fontWeight="bold">Circle of Equal Altitude</text>
- <text x={gpX} y={gpY + 42} textAnchor="middle" fontSize="8.5" fill="#E74C3C">radius = (90°−Ho)×60 nm</text>
+ <text x={gpX} y={gpY + 42} textAnchor="middle" fontSize="10" fill="#E74C3C">radius = (90°−Ho)×60 nm</text>
  <circle cx={gpX + 52} cy={gpY + 7} r="4" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
  <circle cx={gpX - 52} cy={gpY - 3} r="4" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
  </>
@@ -4869,7 +4869,7 @@ export default function App() {
  <text x="100" y="55" textAnchor="middle" fontSize="9" fill="#D7BDE2" fontWeight="bold">STAR</text>
  <line x1="100" y1="70" x2={gpX - 20} y2={gpY + 15} stroke="#9B59B6" strokeWidth="1.5" strokeDasharray="4,3" />
  <circle cx={gpX - 22} cy={gpY + 18} r="5" fill="#9B59B6" />
- <text x={gpX - 38} y={gpY + 12} fontSize="8.5" fill="#9B59B6">GP₂</text>
+ <text x={gpX - 38} y={gpY + 12} fontSize="10" fill="#9B59B6">GP₂</text>
  <ellipse cx={gpX - 20} cy={gpY + 20} rx="50" ry="15" fill="none" stroke="#9B59B6" strokeWidth="2" strokeDasharray="5,4" />
  <circle cx={obsX} cy={obsY} r="9" fill="none" stroke="#F4D03F" strokeWidth="3" />
  <text x={obsX - 22} y={obsY + 22} fontSize="10" fill="#F4D03F" fontWeight="bold">FIX ★</text>
@@ -10526,7 +10526,7 @@ export default function App() {
  <text x={lPos[0].toFixed(1)} y={(lPos[1]-12).toFixed(1)} textAnchor="middle" fontSize="11" fontWeight="800" fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
  {/* Vessel type badge */}
  {vesselType && vesselType !== "PDV" && (
- <text x={lPos[0].toFixed(1)} y={(lPos[1]+14).toFixed(1)} textAnchor="middle" fontSize="7" fontWeight="700" fill="#90caf9" opacity="0.8">{vesselType}</text>
+ <text x={lPos[0].toFixed(1)} y={(lPos[1]+14).toFixed(1)} textAnchor="middle" fontSize="9" fontWeight="700" fill="#90caf9" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">{vesselType}</text>
  )}
  </g>
  );
@@ -10689,7 +10689,7 @@ export default function App() {
  {/* Active ships at current step */}
  {drawShip(tx(st.shipA.x), ty(st.shipA.y), st.shipA.angle, "#90caf9", "O/V", sc.ownType)}
  {drawShip(tx(st.shipB.x), ty(st.shipB.y), st.shipB.angle, catColor, "T/V", sc.targetType)}
- {st.range && <text x="470" y="14" textAnchor="end" fontSize="8" fill="#546e7a">{st.range}</text>}
+ {st.range && <text x="460" y="18" textAnchor="end" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{st.range}</text>}
  <text x="250" y="214" textAnchor="middle" fontSize="9" fill="#90caf9" fontWeight="600">{st.label}</text>
  </svg>
  );
@@ -10796,13 +10796,13 @@ export default function App() {
  {/* Force gauge bar on right */}
  <rect x="430" y="10" width="18" height="180" rx="4" fill="#1a2a3a" />
  <rect x="430" y={10 + 180 - (force / 12) * 180} width="18" height={(force / 12) * 180} rx="4" fill={barColor} />
- <text x="439" y="8" textAnchor="middle" fontSize="9.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F{force}</text>
+ <text x="439" y="15" textAnchor="middle" fontSize="9.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F{force}</text>
  {/* Scale ticks */}
  {[0,3,6,9,12].map(f => (
- <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="8.5" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{f}</text>
+ <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="10" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{f}</text>
  ))}
  {/* Horizon line label */}
- <text x="8" y="105" fontSize="9" fill="#90caf9" opacity="0.6">sea level</text>
+ <text x="15" y="105" fontSize="9" fill="#90caf9" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">sea level</text>
  </svg>
  {/* Slider */}
  <div style={{ margin: "12px 0 8px" }}>
@@ -10888,19 +10888,19 @@ export default function App() {
  <rect x="0" y="0" width="560" height="295" fill="url(#csBg)" />
  <rect x="0" y="295" width="560" height="25" fill="#0d3a5e" />
  <line x1="0" y1="295" x2="560" y2="295" stroke="#1e88e5" strokeWidth="1.5" strokeDasharray="10,5" opacity="0.7" />
- <text x="10" y="306" fontSize="9.5" fill="#1e88e5" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">waterline</text>
+ <text x="20" y="300" fontSize="9.5" fill="#1e88e5" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">waterline</text>
  <path d="M 110,80 L 110,240 Q 112,265 135,278 Q 175,292 280,295 Q 385,292 425,278 Q 448,265 450,240 L 450,80"
  stroke="#607d8b" strokeWidth="3" fill="#0d1f30" />
  <path d="M 148,228 L 162,250 Q 210,262 280,265 Q 350,262 398,250 L 412,228
  Q 430,262 450,275 L 450,295 Q 385,302 280,302 Q 175,302 110,295 L 110,275 Q 130,262 148,228 Z"
  fill="#1a3a55" opacity="0.88" />
- <text x="280" y="260" textAnchor="middle" fontSize="8" fill="#64b5f6" fontWeight="600">DB TANK</text>
+ <text x="280" y="260" textAnchor="middle" fontSize="9" fill="#64b5f6" fontWeight="600">DB TANK</text>
  <path d="M 110,178 L 148,228 L 155,195 Z" fill="#1a4a50" stroke="#26C6DA" strokeWidth="1.5" opacity="0.9" />
  <path d="M 450,178 L 412,228 L 405,195 Z" fill="#1a4a50" stroke="#26C6DA" strokeWidth="1.5" opacity="0.9" />
  <path d="M 110,80 L 110,175 L 155,175 L 155,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
  <path d="M 450,80 L 450,175 L 405,175 L 405,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
- <text x="127" y="138" textAnchor="middle" fontSize="8" fill="#81C784" transform="rotate(-72,127,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
- <text x="433" y="138" textAnchor="middle" fontSize="8" fill="#81C784" transform="rotate(72,433,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
+ <text x="127" y="138" textAnchor="middle" fontSize="9" fill="#81C784" transform="rotate(-72,127,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
+ <text x="433" y="138" textAnchor="middle" fontSize="9" fill="#81C784" transform="rotate(72,433,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
  <rect x="155" y="105" width="250" height="123" fill="#0a1c2c" />
  <line x1="155" y1="195" x2="155" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
  <line x1="405" y1="195" x2="405" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
@@ -10908,7 +10908,7 @@ export default function App() {
  <rect x="110" y="75" width="340" height="8" fill="#455a64" opacity="0.9" />
  <rect x="195" y="55" width="170" height="22" fill="none" stroke="#00BCD4" strokeWidth="3" />
  <rect x="195" y="55" width="170" height="21" fill="#071220" opacity="0.7" />
- <text x="280" y="70" textAnchor="middle" fontSize="8" fill="#00BCD4" fontWeight="700">HATCH OPENING</text>
+ <text x="280" y="70" textAnchor="middle" fontSize="9" fill="#00BCD4" fontWeight="700">HATCH OPENING</text>
  <rect x="264" y="288" width="32" height="6" fill="#FF8F00" rx="1" />
  <line x1="280" y1="288" x2="280" y2="265" stroke="#FF8F00" strokeWidth="3" />
  <line x1="280" y1="265" x2="280" y2="228" stroke="#FFC107" strokeWidth="2.5" />
@@ -10928,12 +10928,12 @@ export default function App() {
  <line x1="104" y1="252" x2="85" y2="264" stroke="#9CCC65" strokeWidth="3.5" />
  <line x1="456" y1="252" x2="475" y2="264" stroke="#9CCC65" strokeWidth="3.5" />
  <line x1="270" y1="75" x2="290" y2="75" stroke="#FFC107" strokeWidth="2.5" />
- <text x="30" y="318" fontSize="8" fill="#546e7a">approx 18m beam / 14m depth</text>
+ <text x="30" y="310" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">approx 18m beam / 14m depth</text>
  {crossMembers.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.82} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="8" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -11000,15 +11000,15 @@ export default function App() {
  <line x1="448" y1="34" x2="472" y2="34" stroke="#78909C" strokeWidth="1.5" />
  <ellipse cx="460" cy="20" rx="7" ry="3" fill="none" stroke="#90caf9" strokeWidth="1.5" />
  <line x1="100" y1="83" x2="440" y2="81" stroke="#607d8b" strokeWidth="1.5" strokeDasharray="6,3" opacity="0.5" />
- <text x="78" y="18" textAnchor="middle" fontSize="9" fill="#ef9a9a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Bridge/Accomm</text>
+ <text x="78" y="22" textAnchor="middle" fontSize="9" fill="#ef9a9a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Bridge/Accomm</text>
  <text x="290" y="73" textAnchor="middle" fontSize="9" fill="#FFB74D" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cargo Holds (5)</text>
  <text x="470" y="57" textAnchor="middle" fontSize="9" fill="#A5D6A7" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F'c'sle</text>
- <text x="558" y="208" fontSize="8" fill="#ef9a9a" fontWeight="600">A/F</text>
+ <text x="540" y="208" fontSize="9" fill="#ef9a9a" fontWeight="600">A/F</text>
  {profileSpots.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.85} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="8" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -11022,8 +11022,8 @@ export default function App() {
  <rect x="62" y="65" width="85" height="70" fill="#253545" stroke="#546e7a" strokeWidth="2" rx="3" />
  <rect x="57" y="60" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
  <rect x="57" y="128" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
- <text x="104" y="101" textAnchor="middle" fontSize="8.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">ACCOMM</text>
- <text x="104" y="116" textAnchor="middle" fontSize="8" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">+ BRIDGE</text>
+ <text x="104" y="101" textAnchor="middle" fontSize="10" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">ACCOMM</text>
+ <text x="104" y="116" textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">+ BRIDGE</text>
  <ellipse cx="84" cy="100" rx="10" ry="12" fill="#37474f" stroke="#607d8b" strokeWidth="1.5" />
  {[155,233,311,389,455].map((x, i) => (
  <g key={"ph"+i}>
@@ -11031,8 +11031,8 @@ export default function App() {
  <rect x={x+2} y="65" width="62" height="33" fill="#253545" stroke="#455a64" strokeWidth="1" rx="1" />
  <rect x={x+2} y="100" width="62" height="35" fill="#253545" stroke="#455a64" strokeWidth="1" rx="1" />
  <line x1={x+2} y1="99" x2={x+64} y2="99" stroke="#37474f" strokeWidth="1" />
- <text x={x+33} y="90" textAnchor="middle" fontSize="8" fill="#546e7a">H{i+1}</text>
- <text x={x+33} y="120" textAnchor="middle" fontSize="8" fill="#546e7a">H{i+1}</text>
+ <text x={x+33} y="90" textAnchor="middle" fontSize="9" fill="#546e7a">H{i+1}</text>
+ <text x={x+33} y="120" textAnchor="middle" fontSize="9" fill="#546e7a">H{i+1}</text>
  </g>
  ))}
  <path d="M 490,55 Q 530,58 548,80 Q 560,90 560,100 Q 560,110 548,120 Q 530,142 490,145 L 490,55 Z"
@@ -11041,7 +11041,7 @@ export default function App() {
  <ellipse cx="541" cy="74" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <ellipse cx="541" cy="126" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <circle cx="505" cy="100" r="4" fill="#78909C" stroke="#90a4ae" strokeWidth="1.5" />
- <text x="505" y="116" textAnchor="middle" fontSize="8.5" fill="#78909C" fontFamily="'Segoe UI',system-ui,sans-serif">MAST</text>
+ <text x="505" y="116" textAnchor="middle" fontSize="10" fill="#78909C" fontFamily="'Segoe UI',system-ui,sans-serif">MAST</text>
  {[72,128].map((y, i) => (
  <rect key={"sb"+i} x="66" y={y} width="6" height="6" fill="#546e7a" rx="1" />
  ))}
@@ -11052,13 +11052,13 @@ export default function App() {
  <line x1="150" y1="137" x2="490" y2="137" stroke="#66BB6A" strokeWidth="1" strokeDasharray="4,3" opacity="0.4" />
  <line x1="150" y1="78" x2="490" y2="78" stroke="#42A5F5" strokeWidth="1" strokeDasharray="5,3" opacity="0.3" />
  <line x1="150" y1="122" x2="490" y2="122" stroke="#42A5F5" strokeWidth="1" strokeDasharray="5,3" opacity="0.3" />
- <text x="550" y="14" textAnchor="end" fontSize="9" fill="#546e7a" fontWeight="600">BOW</text>
- <text x="10" y="14" fontSize="9" fill="#546e7a" fontWeight="600">STERN</text>
+ <text x="540" y="20" textAnchor="end" fontSize="9" fill="#546e7a" fontWeight="600">BOW</text>
+ <text x="20" y="20" fontSize="9" fill="#546e7a" fontWeight="600">STERN</text>
  {planSpots.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.85} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="8" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -11944,7 +11944,7 @@ export default function App() {
  <line x1={cx} y1={cy-radarR} x2={cx} y2={cy+radarR} stroke="#1b5e20" strokeWidth="0.5" opacity="0.35"/>
  <path d={`M${cx},${cy} L${sweepX.toFixed(1)},${sweepY.toFixed(1)} A${radarR},${radarR} 0 0,1 ${(cx+Math.cos(sweepRad-0.45)*radarR).toFixed(1)},${(cy+Math.sin(sweepRad-0.45)*radarR).toFixed(1)} Z`} fill="#33ff33" opacity="0.15"/>
  <line x1={cx} y1={cy} x2={sweepX.toFixed(1)} y2={sweepY.toFixed(1)} stroke="#33ff33" strokeWidth="1.5" opacity="0.8"/>
- <text x={cx} y={cy-radarR-5} textAnchor="middle" fontSize="8" fill="#4caf50" opacity="0.8">RADAR</text>
+ <text x={cx} y={cy-radarR-5} textAnchor="middle" fontSize="9" fill="#4caf50" opacity="0.8">RADAR</text>
  </g>
  )}
  {st.contactVisible && st.contactPos && (
@@ -11953,11 +11953,11 @@ export default function App() {
  <circle cx={st.contactPos.x} cy={st.contactPos.y} r="3.5" fill="#ffeb3b" opacity="0.95"/>
  <line x1={cx} y1={cy} x2={st.contactPos.x} y2={st.contactPos.y} stroke="#ff5722" strokeWidth="1" strokeDasharray="4,3" opacity="0.45"/>
  <text x={st.contactPos.x+10} y={st.contactPos.y-8} fontSize="9" fontWeight="700" fill="#ff5722">CONTACT</text>
- <text x={st.contactPos.x+10} y={st.contactPos.y+4} fontSize="8" fill="#ffb300">FWD OF BEAM</text>
+ <text x={st.contactPos.x+10} y={st.contactPos.y+4} fontSize="9" fill="#ffb300">FWD OF BEAM</text>
  </g>
  )}
  <line x1={cx-95} y1={cy} x2={cx+95} y2={cy} stroke="#546e7a" strokeWidth="1" strokeDasharray="3,3" opacity="0.35"/>
- <text x={cx+97} y={cy+4} fontSize="8" fill="#546e7a" opacity="0.55">BEAM</text>
+ <text x={cx+97} y={cy+4} fontSize="9" fill="#546e7a" opacity="0.55">BEAM</text>
  {drawOwnShip()}
  {st.showFogSignal && (
  <g>
@@ -11967,7 +11967,7 @@ export default function App() {
  <text x={cx} y={cy-58} textAnchor="middle" fontSize="9" fill="#90caf9">every 2 minutes (making way)</text>
  <rect x={cx-40} y={cy-48} width="80" height="9" rx="2" fill="#333" opacity="0.8"/>
  <rect x={cx-38} y={cy-47} width="32" height="7" rx="1" fill="#fff176" opacity="0.9"><animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/></rect>
- <text x={cx+5} y={cy-40} textAnchor="middle" fontSize="7" fill="#78909c">4–6s ←→ 2 min gap</text>
+ <text x={cx+5} y={cy-40} textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">4–6s ←→ 2 min gap</text>
  </g>
  )}
  {st.showReduceSpeed && (
@@ -12001,7 +12001,7 @@ export default function App() {
  <g>
  <rect x="10" y="28" width="106" height="38" rx="7" fill="#1a2a3a" stroke="#E53935" strokeWidth="1.8" opacity="0.95"/>
  <text x="63" y="50" textAnchor="middle" fontSize="12" fontWeight="800" fill="#E53935">ALL STOP</text>
- <text x="63" y="62" textAnchor="middle" fontSize="8" fill="#aaa">Engines astern if needed</text>
+ <text x="63" y="62" textAnchor="middle" fontSize="9" fill="#aaa">Engines astern if needed</text>
  </g>
  )}
  <rect x="0" y="297" width="480" height="23" fill="#0a1628" opacity="0.9"/>
@@ -12089,9 +12089,9 @@ export default function App() {
  <g key={i}>
  <rect x={bx} y={TL_Y} width={bw} height={BAR_H} rx="3" fill={col} opacity={isActive ? 1 : 0.72} stroke={isActive ? "#fff" : col} strokeWidth={isActive ? 1.5 : 0.5}/>
  {isActive && <rect x={bx-2} y={TL_Y-2} width={bw+4} height={BAR_H+4} rx="4" fill="none" stroke={col} strokeWidth="2" opacity="0.5"><animate attributeName="opacity" values="0.5;0;0.5" dur="0.6s" repeatCount="indefinite"/></rect>}
- <text x={bx+bw/2} y={TL_Y+BAR_H/2+4} textAnchor="middle" fontSize={bw>22?"9":"7"} fontWeight="700" fill="#fff" opacity="0.92">{b.label}</text>
- <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="8" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{b.dur}s</text>
- <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="8" fill={col} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
+ <text x={bx+bw/2} y={TL_Y+BAR_H/2+4} textAnchor="middle" fontSize={bw>22?"9":"8"} fontWeight="700" fill="#fff" opacity="0.92">{b.label}</text>
+ <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{b.dur}s</text>
+ <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="9" fill={col} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
  </g>
  );
  })}
@@ -12100,7 +12100,7 @@ export default function App() {
  <g>
  {[0,1,2,3].map(i => { const r = ((pulsePhase+i*15)%60); const col = blastColor(v.blasts[activeBlastIdx].type); return <circle key={i} cx="450" cy="72" r={r} fill="none" stroke={col} strokeWidth={Math.max(0.3,2.5-r/24)} opacity={Math.max(0,0.85-r/60)}/>; })}
  <text x="450" y="152" textAnchor="middle" fontSize="9" fill={v.color} fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif">SOUND</text>
- <text x="450" y="163" textAnchor="middle" fontSize="8" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
+ <text x="450" y="163" textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
  </g>
  )}
  {(!playing || activeBlastIdx < 0) && (
@@ -12228,7 +12228,7 @@ export default function App() {
  fill="#0d1b2acc" stroke={borderCol} strokeWidth="1.5" />
  {lines.map((ln, i) => (
  <text key={i} x={cx} y={by + pad + (i + 0.85) * lineH}
- textAnchor="middle" fontSize="11" fontFamily="monospace" fill={borderCol} fontWeight="700">
+ textAnchor="middle" fontSize="11" fontFamily="'Segoe UI',system-ui,sans-serif" fill={borderCol} fontWeight="700">
  {ln}
  </text>
  ))}
@@ -12332,8 +12332,8 @@ export default function App() {
  {drawBubble(158, 112, ["1L+1S+1L+1S", "= AGREED"], STBD_COL)}
  {/* OR danger */}
  <rect x="280" y="150" width="108" height="38" rx="4" fill="#1a2a3acc" stroke={PORT_COL} strokeWidth="1" />
- <text x="334" y="163" textAnchor="middle" fontSize="8" fontWeight="700" fill={PORT_COL}>IF NOT AGREED:</text>
- <text x="334" y="180" textAnchor="middle" fontSize="9" fontFamily="monospace" fontWeight="700" fill={PORT_COL}>≥ 5 SHORT BLASTS</text>
+ <text x="334" y="163" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>IF NOT AGREED:</text>
+ <text x="334" y="180" textAnchor="middle" fontSize="9" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="700" fill={PORT_COL}>≥ 5 SHORT BLASTS</text>
  </g>
  );
  }
@@ -12357,10 +12357,10 @@ export default function App() {
  {drawShip(215, 88, "down", VBX_COL, "? VES")}
  {/* "?" obscured label */}
  <rect x="270" y="82" width="98" height="26" rx="4" fill="#1a2a3acc" stroke="#78909c" strokeWidth="1" />
- <text x="319" y="99" textAnchor="middle" fontSize="8" fill="#b0bec5">OBSCURED BY BEND</text>
+ <text x="319" y="99" textAnchor="middle" fontSize="9" fill="#b0bec5">OBSCURED BY BEND</text>
  {/* answering signal label */}
  <rect x="262" y="120" width="118" height="26" rx="4" fill="#1a2a3acc" stroke={VBX_COL} strokeWidth="1" />
- <text x="321" y="137" textAnchor="middle" fontSize="8" fontWeight="700" fill={VBX_COL}>ANSWERS: 1 PROLONGED</text>
+ <text x="321" y="137" textAnchor="middle" fontSize="9" fontWeight="700" fill={VBX_COL}>ANSWERS: 1 PROLONGED</text>
  </g>
  );
  }
@@ -12662,11 +12662,11 @@ export default function App() {
  <line x1="450" y1="63" x2="450" y2="28" stroke="#90a4ae" strokeWidth="2.5" />
  <line x1="439" y1="37" x2="461" y2="37" stroke="#90a4ae" strokeWidth="1.5" />
  {/* Labels */}
- <text x="72" y="22" textAnchor="middle" fontSize="8" fill="#263238" fontWeight="700">ACCOMMODATION</text>
- <text x="72" y="30" textAnchor="middle" fontSize="8" fill="#263238">+ FUNNEL AFT</text>
+ <text x="72" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMMODATION</text>
+ <text x="72" y="30" textAnchor="middle" fontSize="9" fill="#263238">+ FUNNEL AFT</text>
  <text x="290" y="72" textAnchor="middle" fontSize="9" fill="#ffd54f" fontWeight="700">HATCH COVERS (5)</text>
- <text x="478" y="59" textAnchor="middle" fontSize="8" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="30" y="188" fontSize="8" fill="#ef9a9a">Anti-fouling below waterline</text>
+ <text x="478" y="59" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="30" y="188" fontSize="9" fill="#ef9a9a">Anti-fouling below waterline</text>
  </svg>
  )}
 
@@ -12741,11 +12741,11 @@ export default function App() {
  <line x1="465" y1="71" x2="465" y2="35" stroke="#607d8b" strokeWidth="2.5" />
  <line x1="455" y1="44" x2="475" y2="44" stroke="#607d8b" strokeWidth="1.5" />
  {/* Labels */}
- <text x="68" y="22" textAnchor="middle" fontSize="7.5" fill="#263238" fontWeight="700">ACCOMM + BRIDGE AFT</text>
- <text x="284" y="52" textAnchor="middle" fontSize="8" fill="#90caf9">PUMP RM VENT MAST</text>
- <text x="284" y="97" textAnchor="middle" fontSize="8.5" fill="#ffd54f" fontWeight="700">FULL-LENGTH CATWALK + MANIFOLDS</text>
- <text x="480" y="64" textAnchor="middle" fontSize="8" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="540" y="182" fontSize="8" fill="#ef9a9a">A/F</text>
+ <text x="68" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMM + BRIDGE AFT</text>
+ <text x="284" y="52" textAnchor="middle" fontSize="9" fill="#90caf9">PUMP RM VENT MAST</text>
+ <text x="284" y="97" textAnchor="middle" fontSize="10" fill="#ffd54f" fontWeight="700">FULL-LENGTH CATWALK + MANIFOLDS</text>
+ <text x="480" y="64" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="182" fontSize="9" fill="#ef9a9a">A/F</text>
  </svg>
  )}
 
@@ -12818,10 +12818,10 @@ export default function App() {
  <line x1="465" y1="62" x2="465" y2="26" stroke="#607d8b" strokeWidth="2.5" />
  <line x1="455" y1="36" x2="475" y2="36" stroke="#607d8b" strokeWidth="1.5" />
  {/* Labels */}
- <text x="62" y="8" textAnchor="middle" fontSize="7.5" fill="#cfd8dc" fontWeight="700">TALL BRIDGE TOWER AFT</text>
- <text x="290" y="10" textAnchor="middle" fontSize="8.5" fill="#ffd54f" fontWeight="700">CONTAINER STACKS (6 bays x 5 tiers)</text>
- <text x="484" y="58" textAnchor="middle" fontSize="8" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="538" y="185" fontSize="8" fill="#ef9a9a">A/F</text>
+ <text x="62" y="14" textAnchor="middle" fontSize="9" fill="#cfd8dc" fontWeight="700">TALL BRIDGE TOWER AFT</text>
+ <text x="290" y="16" textAnchor="middle" fontSize="10" fill="#ffd54f" fontWeight="700">CONTAINER STACKS (6 bays x 5 tiers)</text>
+ <text x="484" y="58" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="185" fontSize="9" fill="#ef9a9a">A/F</text>
  </svg>
  )}
 
@@ -12891,12 +12891,12 @@ export default function App() {
  <path d="M 445,78 L 445,64 L 494,61 Q 510,61 518,65 L 524,78" fill="#eceff1" stroke="#90a4ae" strokeWidth="1.5" />
  <rect x="480" y="57" width="16" height="6" fill="#90a4ae" rx="2" />
  {/* Labels */}
- <text x="68" y="38" textAnchor="middle" fontSize="7.5" fill="#263238">POOP DECK</text>
+ <text x="68" y="38" textAnchor="middle" fontSize="9" fill="#263238">POOP DECK</text>
  <text x="280" y="32" textAnchor="middle" fontSize="9" fill="#EF5350" fontWeight="700">BRIDGE AMIDSHIPS</text>
- <text x="175" y="33" textAnchor="middle" fontSize="8" fill="#78909C" fontWeight="600">DERRICK MASTS</text>
- <text x="165" y="70" textAnchor="middle" fontSize="8" fill="#ffd54f">Holds 1-2</text>
- <text x="395" y="70" textAnchor="middle" fontSize="8" fill="#ffd54f">Holds 3-4</text>
- <text x="490" y="58" textAnchor="middle" fontSize="8" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="175" y="33" textAnchor="middle" fontSize="9" fill="#78909C" fontWeight="600">DERRICK MASTS</text>
+ <text x="165" y="70" textAnchor="middle" fontSize="9" fill="#ffd54f">Holds 1-2</text>
+ <text x="395" y="70" textAnchor="middle" fontSize="9" fill="#ffd54f">Holds 3-4</text>
+ <text x="490" y="58" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
  </svg>
  )}
 
@@ -12973,10 +12973,10 @@ export default function App() {
  <line x1="462" y1="67" x2="462" y2="28" stroke="#78909C" strokeWidth="2.5" />
  <line x1="452" y1="36" x2="472" y2="36" stroke="#78909C" strokeWidth="1.5" />
  {/* Labels */}
- <text x="64" y="22" textAnchor="middle" fontSize="7.5" fill="#263238" fontWeight="700">ACCOMM AFT</text>
+ <text x="64" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMM AFT</text>
  <text x="292" y="15" textAnchor="middle" fontSize="9" fill="#f9a825" fontWeight="700">SPHERICAL MOSS TANKS (4)</text>
- <text x="480" y="62" textAnchor="middle" fontSize="8" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="540" y="183" fontSize="8" fill="#90a4ae">A/F</text>
+ <text x="480" y="62" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="183" fontSize="9" fill="#90a4ae">A/F</text>
  </svg>
  )}
 
@@ -13029,13 +13029,13 @@ export default function App() {
  <path d="M 20,155 L 20,80 L 14,90 L 14,162 Z" fill="#bdbdbd" stroke="#9e9e9e" strokeWidth="2" />
  <path d="M 14,90 L 20,80" stroke="#757575" strokeWidth="3" />
  {/* Ramp label */}
- <text x="7" y="130" textAnchor="middle" fontSize="8" fill="#EF5350" fontWeight="700" transform="rotate(-90,7,130)">STERN RAMP</text>
+ <text x="7" y="130" textAnchor="middle" fontSize="9" fill="#EF5350" fontWeight="700" transform="rotate(-90,7,130)">STERN RAMP</text>
  {/* Bow — rounded, high */}
  <path d="M 480,52 Q 500,51 516,55 Q 528,60 532,74 Q 535,90 540,120" stroke="#9e9e9e" strokeWidth="2" fill="#e0e0e0" />
  {/* Labels */}
- <text x="292" y="12" textAnchor="middle" fontSize="9" fill="#ffd54f" fontWeight="700">VERY HIGH SIDES — MULTIPLE VEHICLE DECKS</text>
- <text x="292" y="166" textAnchor="middle" fontSize="8.5" fill="#90a4ae" fontWeight="600">NO VISIBLE DECK CARGO — VEHICLES INSIDE</text>
- <text x="338" y="24" textAnchor="middle" fontSize="8" fill="#78909C">VENTILATION GRILLES</text>
+ <text x="292" y="18" textAnchor="middle" fontSize="9" fill="#ffd54f" fontWeight="700">VERY HIGH SIDES — MULTIPLE VEHICLE DECKS</text>
+ <text x="292" y="166" textAnchor="middle" fontSize="10" fill="#90a4ae" fontWeight="600">NO VISIBLE DECK CARGO — VEHICLES INSIDE</text>
+ <text x="338" y="24" textAnchor="middle" fontSize="9" fill="#78909C">VENTILATION GRILLES</text>
  </svg>
  )}
 
