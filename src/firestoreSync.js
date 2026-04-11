@@ -22,15 +22,14 @@ const isReady = () => {
 
 // ─── User Sync ───────────────────────────────────────────────
 
-/** Upsert a user document (strips passwordHash for security) */
+/** Upsert a user document (includes passwordHash — it's already SHA-256 hashed) */
 export const syncUserToFirestore = async (userObj) => {
   if (!isReady()) return;
   try {
-    const { passwordHash, ...safeUser } = userObj;
-    const docId = emailToDocId(safeUser.email);
+    const docId = emailToDocId(userObj.email);
     console.log("[Firestore] Syncing user:", docId);
     await setDoc(doc(db, "users", docId), {
-      ...safeUser,
+      ...userObj,
       lastSyncedAt: Date.now()
     }, { merge: true });
     console.log("[Firestore] User synced successfully:", docId);
@@ -63,15 +62,30 @@ export const syncUserUpdateToFirestore = async (email, updates) => {
   if (!isReady()) return;
   try {
     const docId = emailToDocId(email);
-    const { passwordHash, ...safeUpdates } = updates;
     // Use setDoc with merge instead of updateDoc to handle missing docs
     await setDoc(doc(db, "users", docId), {
-      ...safeUpdates,
+      ...updates,
       lastSyncedAt: Date.now()
     }, { merge: true });
     console.log("[Firestore] User updated:", docId);
   } catch (err) {
     console.error("[Firestore] syncUserUpdate failed:", err.message, err);
+  }
+};
+
+/** Fetch a single user from Firestore by email (for cross-device login) */
+export const fetchUserFromFirestore = async (email) => {
+  if (!isReady()) return null;
+  try {
+    const docId = emailToDocId(email);
+    const docSnap = await getDoc(doc(db, "users", docId));
+    if (docSnap.exists()) {
+      return docSnap.data();
+    }
+    return null;
+  } catch (err) {
+    console.error("[Firestore] fetchUser failed:", err.message);
+    return null;
   }
 };
 

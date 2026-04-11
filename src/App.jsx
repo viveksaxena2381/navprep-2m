@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
 import { ROR_NIGHT_CARDS, ROR_DAY_CARDS } from "./rorCardsData.js";
-import { syncUserToFirestore, fetchAllUsersFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
+import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
 const AUTH_STORAGE_KEY = "navprep-users";
@@ -69,7 +69,8 @@ const localAuth = {
  async signUp(email, password, displayName) {
  const users = getStoredUsers();
  const key = email.toLowerCase().trim();
- if (users[key]) throw { code: "auth/email-already-in-use", message: "An account with this email already exists." };
+ // Only block if user exists locally on THIS device
+ if (users[key]) throw { code: "auth/email-already-in-use", message: "An account with this email already exists. Try logging in instead." };
  if (password.length < 6) throw { code: "auth/weak-password", message: "Password must be at least 6 characters." };
  if (!email.includes("@")) throw { code: "auth/invalid-email", message: "Please enter a valid email address." };
  const hashed = await simpleHash(password);
@@ -96,8 +97,22 @@ const localAuth = {
  async signIn(email, password) {
  const users = getStoredUsers();
  const key = email.toLowerCase().trim();
- const user = users[key];
- if (!user) throw { code: "auth/user-not-found", message: "No account found with this email." };
+ let user = users[key];
+ // If user not found locally, try fetching from Firestore (cross-device login)
+ if (!user) {
+   const firestoreUser = await fetchUserFromFirestore(key);
+   if (firestoreUser && firestoreUser.passwordHash) {
+     // User exists in Firestore — pull into local storage for future logins
+     user = firestoreUser;
+     users[key] = user;
+     try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+   } else if (firestoreUser) {
+     // User exists but no passwordHash (old data) — ask to re-register
+     throw { code: "auth/user-not-found", message: "Account found but needs re-registration. Please sign up again with the same email and password." };
+   } else {
+     throw { code: "auth/user-not-found", message: "No account found with this email." };
+   }
+ }
  const hashed = await simpleHash(password);
  if (hashed !== user.passwordHash) throw { code: "auth/wrong-password", message: "Incorrect password." };
  if (user.status === "suspended") throw { code: "auth/user-disabled", message: "Your account has been suspended. Contact admin." };
