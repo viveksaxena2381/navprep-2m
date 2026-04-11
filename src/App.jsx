@@ -69,11 +69,29 @@ const localAuth = {
  async signUp(email, password, displayName) {
  const users = getStoredUsers();
  const key = email.toLowerCase().trim();
- // Only block if user exists locally on THIS device
  if (users[key]) throw { code: "auth/email-already-in-use", message: "An account with this email already exists. Try logging in instead." };
  if (password.length < 6) throw { code: "auth/weak-password", message: "Password must be at least 6 characters." };
  if (!email.includes("@")) throw { code: "auth/invalid-email", message: "Please enter a valid email address." };
  const hashed = await simpleHash(password);
+ // Check if account exists in Firestore (created on another device)
+ const existingUser = await fetchUserFromFirestore(key);
+ if (existingUser && existingUser.passwordHash) {
+   // Account exists in Firestore — verify password and pull to this device
+   if (hashed !== existingUser.passwordHash) {
+     throw { code: "auth/wrong-password", message: "An account with this email exists. The password you entered doesn't match. Try signing in instead." };
+   }
+   // Password matches — pull user to this device
+   existingUser.lastLogin = Date.now();
+   existingUser.loginCount = (existingUser.loginCount || 0) + 1;
+   if (displayName) existingUser.displayName = displayName;
+   users[key] = existingUser;
+   try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+   syncUserToFirestore(existingUser);
+   trackLogin(key);
+   const session = { email: existingUser.email, displayName: existingUser.displayName };
+   try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
+   return session;
+ }
  const user = {
  email: key,
  displayName: displayName || key.split("@")[0],
@@ -81,14 +99,14 @@ const localAuth = {
  createdAt: Date.now(),
  lastLogin: Date.now(),
  loginCount: 1,
- status: "active", // active | suspended
- subscription: "free", // free | basic | premium
- subscriptionExpiry: null, // timestamp or null
- paymentRef: null // link to payment ID later
+ status: "active",
+ subscription: "free",
+ subscriptionExpiry: null,
+ paymentRef: null
  };
  users[key] = user;
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
- syncUserToFirestore(user); // sync new user to Firestore
+ syncUserToFirestore(user);
  trackLogin(key);
  const session = { email: user.email, displayName: user.displayName };
  try { localStorage.setItem(SESSION_KEY, JSON.stringify(session)); } catch {}
@@ -144,6 +162,19 @@ const localAuth = {
  try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
  syncUserUpdateToFirestore(email, updates); // sync update to Firestore
  }
+ },
+ async resetPassword(email, newPassword) {
+ if (newPassword.length < 6) throw { code: "auth/weak-password", message: "Password must be at least 6 characters." };
+ const key = email.toLowerCase().trim();
+ const hashed = await simpleHash(newPassword);
+ // Update locally if exists
+ const users = getStoredUsers();
+ if (users[key]) {
+   users[key].passwordHash = hashed;
+   try { localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(users)); } catch {}
+ }
+ // Update in Firestore
+ syncUserUpdateToFirestore(key, { passwordHash: hashed });
  },
  deleteUser(email) {
  const users = getStoredUsers();
@@ -13556,6 +13587,34 @@ export default function App() {
  const [error, setError] = useState("");
  const [loading, setLoading] = useState(false);
  const [expandedMod, setExpandedMod] = useState(null); // "subj-mod" key
+ const [forgotMode, setForgotMode] = useState(false);
+ const [newPassword, setNewPassword] = useState("");
+ const [resetSuccess, setResetSuccess] = useState("");
+
+ const handleForgotPassword = async (e) => {
+   e.preventDefault();
+   setError(""); setResetSuccess(""); setLoading(true);
+   try {
+     if (!email.includes("@")) throw { message: "Please enter a valid email address." };
+     if (newPassword.length < 6) throw { message: "New password must be at least 6 characters." };
+     // Check user exists in Firestore
+     const firestoreUser = await fetchUserFromFirestore(email.toLowerCase().trim());
+     if (!firestoreUser) {
+       // Also check local
+       const localUsers = getStoredUsers();
+       if (!localUsers[email.toLowerCase().trim()]) {
+         throw { message: "No account found with this email address." };
+       }
+     }
+     await localAuth.resetPassword(email, newPassword);
+     setResetSuccess("Password reset successfully! You can now sign in with your new password.");
+     setNewPassword("");
+     setTimeout(() => { setForgotMode(false); setResetSuccess(""); }, 3000);
+   } catch (err) {
+     setError(err.message);
+   }
+   setLoading(false);
+ };
 
  const handleEmailLogin = async (e) => {
  e.preventDefault();
@@ -13742,7 +13801,7 @@ export default function App() {
  )}
 
  {/* EMAIL LOGIN */}
- {authPage === "login" && (
+ {authPage === "login" && !forgotMode && (
  <form onSubmit={handleEmailLogin}>
  <div style={{ marginBottom: 14 }}>
  <label style={labelStyle}>Email Address</label>
@@ -13751,15 +13810,55 @@ export default function App() {
  onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
  onBlur={e => { e.target.style.borderColor = inputStyle.border.split(" ").pop(); e.target.style.boxShadow = "none"; }} />
  </div>
- <div style={{ marginBottom: 20 }}>
+ <div style={{ marginBottom: 12 }}>
  <label style={labelStyle}>Password</label>
  <input type="password" value={password} onChange={e => setPassword(e.target.value)}
  placeholder="Enter your password" required style={inputStyle}
  onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
  onBlur={e => { e.target.style.borderColor = inputStyle.border.split(" ").pop(); e.target.style.boxShadow = "none"; }} />
  </div>
+ <div style={{ textAlign: "right", marginBottom: 16 }}>
+   <button type="button" onClick={() => { setForgotMode(true); setError(""); setResetSuccess(""); }}
+     style={{ background: "none", border: "none", color: "#d4af37", fontSize: 11, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textDecoration: "underline", opacity: 0.8 }}>
+     Forgot Password?
+   </button>
+ </div>
  <button type="submit" disabled={loading} style={goldBtn}>
  {loading ? "Signing in..." : "Sign In"}
+ </button>
+ </form>
+ )}
+
+ {/* FORGOT PASSWORD */}
+ {authPage === "login" && forgotMode && (
+ <form onSubmit={handleForgotPassword}>
+ <div style={{ marginBottom: 6, fontSize: 13, fontWeight: 700, color: "#d4af37", fontFamily: "'DM Sans', sans-serif" }}>Reset Your Password</div>
+ <div style={{ marginBottom: 14, fontSize: 11, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>Enter your email and a new password below.</div>
+ {resetSuccess && (
+   <div style={{ padding: "8px 12px", borderRadius: 10, marginBottom: 14, fontSize: 12, background: "rgba(76,175,80,0.12)", color: "#81c784", border: "1px solid rgba(76,175,80,0.2)", lineHeight: 1.5 }}>
+     {resetSuccess}
+   </div>
+ )}
+ <div style={{ marginBottom: 14 }}>
+   <label style={labelStyle}>Email Address</label>
+   <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+     placeholder="you@example.com" required style={inputStyle}
+     onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+     onBlur={e => { e.target.style.borderColor = inputStyle.border.split(" ").pop(); e.target.style.boxShadow = "none"; }} />
+ </div>
+ <div style={{ marginBottom: 20 }}>
+   <label style={labelStyle}>New Password</label>
+   <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+     placeholder="Min 6 characters" required style={inputStyle}
+     onFocus={e => Object.assign(e.target.style, inputFocusStyle)}
+     onBlur={e => { e.target.style.borderColor = inputStyle.border.split(" ").pop(); e.target.style.boxShadow = "none"; }} />
+ </div>
+ <button type="submit" disabled={loading} style={goldBtn}>
+   {loading ? "Resetting..." : "Reset Password"}
+ </button>
+ <button type="button" onClick={() => { setForgotMode(false); setError(""); setResetSuccess(""); }}
+   style={{ width: "100%", marginTop: 8, padding: "10px", borderRadius: 12, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+   Back to Sign In
  </button>
  </form>
  )}
@@ -15238,6 +15337,17 @@ export default function App() {
  refreshData();
  };
 
+ const handleResetPasswordAdmin = async (email) => {
+ const newPwd = prompt(`Reset password for ${email}.\nEnter new password (min 6 chars):`);
+ if (!newPwd) return;
+ if (newPwd.length < 6) { alert("Password must be at least 6 characters."); return; }
+ try {
+   await localAuth.resetPassword(email, newPwd);
+   alert(`Password reset successfully for ${email}`);
+   refreshData();
+ } catch (err) { alert("Reset failed: " + err.message); }
+ };
+
  const handleDeleteUser = (email) => {
  if (email === ADMIN_EMAIL) return;
  if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
@@ -15376,6 +15486,11 @@ export default function App() {
  onClick={() => { setSelectedUser(u.email); setSubForm({ plan: u.subscription || "free", days: 30, paymentRef: u.paymentRef || "" }); }}
  style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.border}`, background: "rgba(212,175,55,0.08)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>
  💳
+ </button>
+ <button title="Reset password"
+ onClick={() => handleResetPasswordAdmin(u.email)}
+ style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${theme.border}`, background: "rgba(74,144,226,0.08)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>
+ 🔑
  </button>
  {u.email !== ADMIN_EMAIL && (
  <>
