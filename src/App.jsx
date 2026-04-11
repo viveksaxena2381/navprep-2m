@@ -13719,6 +13719,17 @@ export default function App() {
  ))}
  </div>
 
+ {/* Free app callout */}
+ <div style={{
+   textAlign: "center", marginBottom: 16, padding: "10px 12px",
+   background: "linear-gradient(135deg, rgba(212,175,55,0.12), rgba(212,175,55,0.05))",
+   borderRadius: 12, border: "1px solid rgba(212,175,55,0.2)"
+ }}>
+   <span style={{ fontWeight: 800, fontSize: 13, color: "#d4af37", letterSpacing: 0.3, fontFamily: "'DM Sans', sans-serif" }}>
+     It's FREE — just log in to reap the benefits!
+   </span>
+ </div>
+
  {/* Error message */}
  {error && (
  <div style={{
