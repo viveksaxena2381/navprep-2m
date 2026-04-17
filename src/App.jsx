@@ -498,6 +498,28 @@ export default function App() {
  const isAdmin = currentUser?.email === ADMIN_EMAIL;
  const handleLogout = () => { localAuth.signOut(); setCurrentUser(null); };
 
+ // ─── Auto-logout after 30 minutes of inactivity ───
+ useEffect(() => {
+   if (!currentUser) return;
+   const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutes in ms
+   let timer;
+   const reset = () => {
+     clearTimeout(timer);
+     timer = setTimeout(() => {
+       localAuth.signOut();
+       setCurrentUser(null);
+       alert("You have been logged out due to 30 minutes of inactivity.");
+     }, INACTIVITY_LIMIT);
+   };
+   const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
+   events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+   reset(); // start the timer immediately
+   return () => {
+     clearTimeout(timer);
+     events.forEach(e => window.removeEventListener(e, reset));
+   };
+ }, [currentUser]);
+
  // ─── Responsive ───
  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
  useEffect(() => {
