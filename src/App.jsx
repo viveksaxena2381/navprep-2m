@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
 import { ROR_NIGHT_CARDS, ROR_DAY_CARDS } from "./rorCardsData.js";
+import { TOPIC_ENRICHMENTS, DOC_MOCKUPS } from "./imageData.js";
 import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncVisitMetaToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
@@ -959,6 +960,162 @@ export default function App() {
  </div>
  )}
  </div>
+ );
+
+ // ═══════════════════════════════════════════════
+ // REAL-WORLD PHOTO GALLERY ─ theory enrichment
+ // ═══════════════════════════════════════════════
+
+ const RealPhotoGallery = ({ images }) => {
+   const [failedIdx, setFailedIdx] = useState([]);
+   const [expanded, setExpanded] = useState(null);
+   const visible = (images || []).filter((_, i) => !failedIdx.includes(i));
+   if (visible.length === 0) return null;
+   return (
+     <div style={{ marginBottom: 24 }}>
+       {/* Section header */}
+       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, paddingBottom: 8, borderBottom: `2px solid ${theme.accent}25` }}>
+         <span style={{ fontSize: 18 }}>📸</span>
+         <div>
+           <div style={{ fontSize: 13, fontWeight: 700, color: theme.text, letterSpacing: 0.2 }}>Real-World Reference</div>
+           <div style={{ fontSize: 11, color: theme.textMuted }}>See what this looks like in practice</div>
+         </div>
+       </div>
+       {/* Image grid */}
+       <div style={{ display: "grid", gridTemplateColumns: visible.length === 1 ? "1fr" : "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+         {(images || []).map((img, i) => {
+           if (failedIdx.includes(i)) return null;
+           return (
+             <div key={i} onClick={() => setExpanded(expanded === i ? null : i)}
+               style={{ borderRadius: 12, overflow: "hidden", border: `1.5px solid ${theme.border}`, cursor: "zoom-in",
+                 boxShadow: expanded === i
+                   ? `0 8px 32px rgba(0,0,0,0.25), 0 0 0 2px ${theme.accent}60`
+                   : darkMode ? "0 2px 12px rgba(0,0,0,0.3)" : "0 2px 10px rgba(0,0,0,0.08)",
+                 transition: "all 0.2s", position: "relative",
+                 gridColumn: expanded === i ? "1 / -1" : "auto" }}>
+               <img
+                 src={img.url}
+                 alt={img.caption}
+                 onError={() => setFailedIdx(p => [...p, i])}
+                 style={{ width: "100%", height: expanded === i ? "auto" : "200px", objectFit: expanded === i ? "contain" : "cover",
+                   display: "block", background: darkMode ? "#111" : "#f5f5f5", transition: "height 0.3s" }}
+               />
+               <div style={{ padding: "10px 14px", background: darkMode ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", borderTop: `1px solid ${theme.border}` }}>
+                 <div style={{ fontSize: 12.5, color: theme.text, lineHeight: 1.5, fontStyle: "italic" }}>{img.caption}</div>
+                 {img.credit && (
+                   <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 4 }}>
+                     <span style={{ opacity: 0.7 }}>📷 {img.credit}</span>
+                   </div>
+                 )}
+               </div>
+             </div>
+           );
+         })}
+       </div>
+     </div>
+   );
+ };
+
+ // ═══════════════════════════════════════════════
+ // MARITIME DOCUMENT MOCKUP ─ styled form panels
+ // ═══════════════════════════════════════════════
+
+ const DocMockupCard = ({ mockup }) => {
+   const [open, setOpen] = useState(false);
+   if (!mockup) return null;
+   const borderColor = mockup.color || theme.accent;
+   return (
+     <div style={{ marginBottom: 24, borderRadius: 14, overflow: "hidden", border: `1.5px solid ${borderColor}40`,
+       boxShadow: darkMode ? "0 4px 24px rgba(0,0,0,0.35)" : "0 4px 18px rgba(0,0,0,0.1)" }}>
+       {/* Doc header */}
+       <div onClick={() => setOpen(o => !o)} style={{ cursor: "pointer", userSelect: "none",
+         background: `linear-gradient(135deg, ${borderColor}15 0%, ${borderColor}05 100%)`,
+         borderBottom: open ? `1px solid ${borderColor}30` : "none", padding: "14px 20px",
+         display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+           <span style={{ fontSize: 22 }}>{mockup.icon}</span>
+           <div>
+             <div style={{ fontSize: 14, fontWeight: 700, color: theme.text, fontFamily: "'DM Serif Display', serif" }}>{mockup.title}</div>
+             <div style={{ fontSize: 11, color: borderColor, fontWeight: 600, marginTop: 2 }}>{mockup.subtitle}</div>
+           </div>
+         </div>
+         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+           <span style={{ fontSize: 10, background: `${borderColor}20`, color: borderColor, padding: "3px 10px", borderRadius: 10, fontWeight: 700 }}>Sample Document</span>
+           <span style={{ color: theme.textMuted, fontSize: 13, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>›</span>
+         </div>
+       </div>
+       {open && (
+         <div style={{ background: darkMode ? "#0a0f1a" : "#FAFBFC", fontFamily: "'Courier New', monospace" }}>
+           {/* Decorative top rule */}
+           <div style={{ height: 3, background: `linear-gradient(90deg, ${borderColor}, ${borderColor}80, transparent)` }} />
+           {/* Official document body */}
+           <div style={{ padding: "20px 24px" }}>
+             {/* Header fields */}
+             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 18,
+               padding: "14px 16px", background: darkMode ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.025)",
+               borderRadius: 8, border: `1px solid ${borderColor}20` }}>
+               {(mockup.fields || []).map((f, i) => (
+                 <div key={i}>
+                   <div style={{ fontSize: 9, fontWeight: 700, color: borderColor, textTransform: "uppercase", letterSpacing: 1, marginBottom: 2 }}>{f.label}</div>
+                   <div style={{ fontSize: 12, color: theme.text, fontWeight: 600 }}>{f.value}</div>
+                 </div>
+               ))}
+             </div>
+             {/* Table rows */}
+             <div style={{ border: `1px solid ${borderColor}30`, borderRadius: 8, overflow: "hidden", marginBottom: 16 }}>
+               <div style={{ display: "grid", gridTemplateColumns: "60px 1fr 200px", background: `${borderColor}15`,
+                 padding: "8px 14px", borderBottom: `1px solid ${borderColor}30` }}>
+                 <div style={{ fontSize: 9, fontWeight: 700, color: borderColor, textTransform: "uppercase" }}>Code</div>
+                 <div style={{ fontSize: 9, fontWeight: 700, color: borderColor, textTransform: "uppercase" }}>Operation / Description</div>
+                 <div style={{ fontSize: 9, fontWeight: 700, color: borderColor, textTransform: "uppercase" }}>Details / Quantity</div>
+               </div>
+               {(mockup.rows || []).map((row, i) => (
+                 <div key={i} style={{ display: "grid", gridTemplateColumns: "60px 1fr 200px",
+                   padding: "10px 14px", borderBottom: `1px solid ${borderColor}15`,
+                   background: i % 2 === 0 ? (darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)") : "transparent" }}>
+                   <div style={{ fontSize: 11, fontWeight: 700, color: borderColor }}>{row.code}</div>
+                   <div style={{ fontSize: 11, color: theme.text, lineHeight: 1.5 }}>{row.operation}</div>
+                   <div style={{ fontSize: 11, color: theme.textMuted, lineHeight: 1.5 }}>{row.value}</div>
+                 </div>
+               ))}
+             </div>
+             {/* Certification */}
+             <div style={{ padding: "12px 16px", background: darkMode ? "rgba(255,255,255,0.03)" : "#FFF",
+               borderRadius: 8, border: `1px dashed ${borderColor}40`, marginBottom: 12 }}>
+               <div style={{ fontSize: 10, fontWeight: 700, color: borderColor, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Master's Certification</div>
+               <div style={{ fontSize: 11.5, color: theme.text, lineHeight: 1.6, fontStyle: "italic" }}>{mockup.certification}</div>
+               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, paddingTop: 10, borderTop: `1px solid ${borderColor}20` }}>
+                 {["Master's Signature", "Chief Officer", "Date"].map(label => (
+                   <div key={label} style={{ textAlign: "center" }}>
+                     <div style={{ width: 100, height: 1, background: theme.textMuted, marginBottom: 4 }} />
+                     <div style={{ fontSize: 9, color: theme.textMuted }}>{label}</div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+             {/* Footer */}
+             <div style={{ fontSize: 10, color: theme.textMuted, textAlign: "center", fontStyle: "italic", lineHeight: 1.6 }}>{mockup.footer}</div>
+           </div>
+         </div>
+       )}
+     </div>
+   );
+ };
+
+ // ═══════════════════════════════════════════════
+ // DID YOU KNOW ─ fun fact callout
+ // ═══════════════════════════════════════════════
+
+ const DidYouKnowBox = ({ text }) => (
+   <div style={{ marginBottom: 20, padding: "14px 20px 16px", borderRadius: 14,
+     background: darkMode ? "rgba(212,175,55,0.07)" : "rgba(255,220,50,0.08)",
+     border: `1.5px solid ${theme.accent}35`, display: "flex", gap: 14, alignItems: "flex-start" }}>
+     <span style={{ fontSize: 24, flexShrink: 0, lineHeight: 1.3 }}>💡</span>
+     <div>
+       <div style={{ fontSize: 10.5, fontWeight: 700, color: theme.accent, textTransform: "uppercase", letterSpacing: 1.1, marginBottom: 5 }}>Did You Know?</div>
+       <div style={{ fontSize: 14, color: theme.text, lineHeight: 1.75 }}>{text}</div>
+     </div>
+   </div>
  );
 
  // ═══════════════════════════════════════════════
@@ -14611,6 +14768,12 @@ export default function App() {
  {hasSections && (
  <span style={{ fontSize: 10, color: theme.success, background: `${theme.success}14`, padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>📖 Full notes</span>
  )}
+ {TOPIC_ENRICHMENTS[topic.id] && (
+ <span style={{ fontSize: 10, color: "#8B5CF6", background: "rgba(139,92,246,0.1)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>📸 Photos</span>
+ )}
+ {TOPIC_ENRICHMENTS[topic.id]?.doc && (
+ <span style={{ fontSize: 10, color: "#d4af37", background: "rgba(212,175,55,0.1)", padding: "2px 8px", borderRadius: 8, fontWeight: 600 }}>📋 Doc</span>
+ )}
  </div>
  </div>
 
@@ -14687,6 +14850,28 @@ export default function App() {
  if (!selectedTopic || !selectedSubject || !selectedModule) return null;
  const topic = selectedTopic;
  const isBookmarked = bookmarks.includes(topic.id);
+ const enrichment = TOPIC_ENRICHMENTS[topic.id];
+ const subj = selectedSubject;
+
+ // ── Reading time estimate ──────────────────────────────────────
+ const wordCount = (() => {
+   let words = 0;
+   if (topic.content) words += topic.content.split(/\s+/).length;
+   (topic.sections || []).forEach(s => {
+     if (s.body) words += s.body.split(/\s+/).length;
+     (s.paragraphs || []).forEach(p => { words += p.split(/\s+/).length; });
+   });
+   return words;
+ })();
+ const readMins = Math.max(1, Math.ceil(wordCount / 220));
+
+ // ── Difficulty badge ───────────────────────────────────────────
+ const hasFormulas = (topic.formulas || []).length > 0;
+ const sectionCount = (topic.sections || []).length;
+ const difficulty = hasFormulas ? { label: "Advanced", color: "#C93030", emoji: "🔴" }
+   : sectionCount >= 8 ? { label: "Advanced", color: "#C93030", emoji: "🔴" }
+   : sectionCount >= 4 ? { label: "Intermediate", color: "#D97706", emoji: "🟡" }
+   : { label: "Beginner", color: "#17935E", emoji: "🟢" };
 
  const renderContent = (text) => {
  return text.split("\n").map((line, i) => {
@@ -14726,18 +14911,77 @@ export default function App() {
  { label: topic.name }
  ]} />
 
- <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, gap: 16, flexWrap: "wrap" }}>
- <h1 style={{ ...css.sectionTitle, fontSize: 22, margin: 0 }}>{topic.name}</h1>
- <div style={{ display: "flex", gap: 8 }}>
- <button style={css.btn()} onClick={() => toggleBookmark(topic.id)}>
- {isBookmarked ? "★ Bookmarked" : "☆ Bookmark"}
- </button>
- {progress[topic.id]?.completed
- ? <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", display: "flex", alignItems: "center", gap: 5 }}>✅ Completed</span>
- : <button style={css.btn("success")} onClick={() => markTopicComplete(topic.id)}>✓ Mark complete</button>
- }
+ {/* ── Enhanced Topic Header ───────────────────────────── */}
+ <div style={{ marginBottom: 24, borderRadius: 16, overflow: "hidden",
+   boxShadow: darkMode ? "0 4px 24px rgba(0,0,0,0.35)" : "0 4px 18px rgba(0,0,0,0.1)",
+   border: `1px solid ${subj.color}30` }}>
+   {/* Colour bar */}
+   <div style={{ height: 5, background: `linear-gradient(90deg, ${subj.color} 0%, ${subj.color}99 60%, transparent 100%)` }} />
+   <div style={{ padding: "20px 24px 18px",
+     background: darkMode
+       ? `linear-gradient(135deg, ${subj.color}08 0%, ${theme.cardBg} 100%)`
+       : `linear-gradient(135deg, ${subj.color}06 0%, ${theme.cardBg} 100%)` }}>
+     {/* Subject label */}
+     <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+       <span style={{ fontSize: 15 }}>{subj.icon}</span>
+       <span style={{ fontSize: 11, fontWeight: 700, color: subj.color, textTransform: "uppercase", letterSpacing: 1 }}>{subj.name}</span>
+       <span style={{ fontSize: 10, color: theme.textMuted }}>›</span>
+       <span style={{ fontSize: 11, color: theme.textMuted }}>{selectedModule.name}</span>
+     </div>
+     {/* Topic title */}
+     <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 26, fontWeight: 700,
+       color: theme.text, margin: "0 0 14px", lineHeight: 1.3, letterSpacing: -0.3 }}>
+       {topic.name}
+     </h1>
+     {/* Metadata chips row */}
+     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+       <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600,
+         padding: "4px 11px", borderRadius: 20, background: `${difficulty.color}15`, color: difficulty.color,
+         border: `1px solid ${difficulty.color}30` }}>
+         {difficulty.emoji} {difficulty.label}
+       </span>
+       <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600,
+         padding: "4px 11px", borderRadius: 20, background: theme.surfaceAlt, color: theme.textMuted,
+         border: `1px solid ${theme.border}` }}>
+         🕐 {readMins} min read
+       </span>
+       {(topic.mcqs||[]).length > 0 && (
+         <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600,
+           padding: "4px 11px", borderRadius: 20, background: `${subj.color}12`, color: subj.color,
+           border: `1px solid ${subj.color}25` }}>
+           ✏️ {(topic.mcqs||[]).length} practice Q
+         </span>
+       )}
+       {enrichment && (
+         <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600,
+           padding: "4px 11px", borderRadius: 20, background: "rgba(139,92,246,0.1)", color: "#8B5CF6",
+           border: "1px solid rgba(139,92,246,0.25)" }}>
+           📸 Real photos
+         </span>
+       )}
+       {enrichment?.doc && (
+         <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600,
+           padding: "4px 11px", borderRadius: 20, background: "rgba(212,175,55,0.1)", color: theme.accent,
+           border: `1px solid ${theme.accent}30` }}>
+           📋 Sample document
+         </span>
+       )}
+     </div>
+     {/* Actions */}
+     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+       <button style={{ ...css.btn(), fontSize: 12, padding: "7px 14px" }} onClick={() => toggleBookmark(topic.id)}>
+         {isBookmarked ? "★ Bookmarked" : "☆ Bookmark"}
+       </button>
+       {progress[topic.id]?.completed
+         ? <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", display: "flex", alignItems: "center", gap: 5 }}>✅ Completed</span>
+         : <button style={{ ...css.btn("success"), fontSize: 12, padding: "7px 14px" }} onClick={() => markTopicComplete(topic.id)}>✓ Mark complete</button>
+       }
+     </div>
+   </div>
  </div>
- </div>
+
+ {/* ── Fun Fact ─────────────────────────────────────────── */}
+ {enrichment?.funFact && <DidYouKnowBox text={enrichment.funFact} />}
 
  {/* Main content — narrative sections or legacy */}
  {topic.sections && topic.sections.length > 0
@@ -14791,19 +15035,31 @@ export default function App() {
  )
  }
 
+ {/* ── Real-World Photos ─────────────────────────────── */}
+ {enrichment?.images && enrichment.images.length > 0 && (
+   <RealPhotoGallery images={enrichment.images} />
+ )}
+
+ {/* ── Sample Document Mockup ────────────────────────── */}
+ {enrichment?.doc && DOC_MOCKUPS[enrichment.doc] && (
+   <DocMockupCard mockup={DOC_MOCKUPS[enrichment.doc]} />
+ )}
+
  {/* MCQ section — collapsible, shown at bottom regardless of content type */}
  {(topic.mcqs||[]).length > 0 && <CollapsibleMCQSection topic={topic} />}
 
- {/* Navigation */}
- <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24 }}>
+ {/* ── Bottom navigation ─────────────────────────────── */}
+ <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, gap: 12, flexWrap: "wrap" }}>
  {currentIdx > 0 ? (
- <button style={css.btn()} onClick={() => navigate("topic", selectedSubject, selectedModule, allTopics[currentIdx - 1])}>
- ← {allTopics[currentIdx - 1].name.slice(0, 30)}...
+ <button style={{ ...css.btn(), display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}
+   onClick={() => navigate("topic", selectedSubject, selectedModule, allTopics[currentIdx - 1])}>
+   ← {allTopics[currentIdx - 1].name.length > 35 ? allTopics[currentIdx - 1].name.slice(0, 35) + "…" : allTopics[currentIdx - 1].name}
  </button>
  ) : <div />}
  {currentIdx < allTopics.length - 1 && (
- <button style={css.btn()} onClick={() => navigate("topic", selectedSubject, selectedModule, allTopics[currentIdx + 1])}>
- {allTopics[currentIdx + 1].name.slice(0, 30)}... →
+ <button style={{ ...css.btn("primary"), display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}
+   onClick={() => navigate("topic", selectedSubject, selectedModule, allTopics[currentIdx + 1])}>
+   {allTopics[currentIdx + 1].name.length > 35 ? allTopics[currentIdx + 1].name.slice(0, 35) + "…" : allTopics[currentIdx + 1].name} →
  </button>
  )}
  </div>
