@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
 import { ROR_NIGHT_CARDS, ROR_DAY_CARDS } from "./rorCardsData.js";
-import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
+import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncVisitMetaToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
 const AUTH_STORAGE_KEY = "navprep-users";
@@ -15,7 +15,7 @@ const getStoredUsers = () => {
 };
 
 const getAnalytics = () => {
- try { return JSON.parse(localStorage.getItem(ANALYTICS_KEY)) || { totalVisits: 0, dailyHits: {}, loginHistory: [] }; } catch { return { totalVisits: 0, dailyHits: {}, loginHistory: [] }; }
+ try { return JSON.parse(localStorage.getItem(ANALYTICS_KEY)) || { totalVisits: 0, dailyHits: {}, loginHistory: [], uniqueVisitors: {}, trafficSources: {}, deviceTypes: {} }; } catch { return { totalVisits: 0, dailyHits: {}, loginHistory: [], uniqueVisitors: {}, trafficSources: {}, deviceTypes: {} }; }
 };
 
 const saveAnalytics = (data) => {
@@ -36,6 +36,47 @@ const saveStoredCorrections = (data) => {
 };
 const generateId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
+// Get or create unique visitor ID (stored in localStorage)
+const VISITOR_ID_KEY = "navprep-visitor-id";
+const getVisitorId = () => {
+ let vid = localStorage.getItem(VISITOR_ID_KEY);
+ if (!vid) {
+   vid = "v_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 9);
+   try { localStorage.setItem(VISITOR_ID_KEY, vid); } catch {}
+ }
+ return vid;
+};
+
+// Detect device type from userAgent
+const getDeviceType = () => {
+ if (typeof navigator === "undefined") return "unknown";
+ const ua = navigator.userAgent.toLowerCase();
+ if (/ipad|tablet|(android(?!.*mobile))/i.test(ua)) return "tablet";
+ if (/mobile|iphone|android|ipod|blackberry|iemobile|opera mini/i.test(ua)) return "mobile";
+ return "desktop";
+};
+
+// Detect traffic source from referrer
+const getTrafficSource = () => {
+ if (typeof document === "undefined" || !document.referrer) return "direct";
+ try {
+   const ref = new URL(document.referrer).hostname.toLowerCase();
+   if (!ref || ref.includes(window.location.hostname)) return "direct";
+   if (ref.includes("google.")) return "google";
+   if (ref.includes("facebook.") || ref.includes("fb.")) return "facebook";
+   if (ref.includes("whatsapp.") || ref.includes("wa.me")) return "whatsapp";
+   if (ref.includes("t.me") || ref.includes("telegram.")) return "telegram";
+   if (ref.includes("youtube.") || ref.includes("youtu.be")) return "youtube";
+   if (ref.includes("instagram.")) return "instagram";
+   if (ref.includes("linkedin.")) return "linkedin";
+   if (ref.includes("twitter.") || ref.includes("x.com")) return "twitter";
+   if (ref.includes("bing.")) return "bing";
+   if (ref.includes("quora.")) return "quora";
+   if (ref.includes("reddit.")) return "reddit";
+   return ref;
+ } catch { return "direct"; }
+};
+
 // Track a page visit
 const trackVisit = () => {
  const analytics = getAnalytics();
@@ -43,6 +84,23 @@ const trackVisit = () => {
  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
  if (!analytics.dailyHits) analytics.dailyHits = {};
  analytics.dailyHits[today] = (analytics.dailyHits[today] || 0) + 1;
+ // Unique visitors tracking per day
+ if (!analytics.uniqueVisitors) analytics.uniqueVisitors = {};
+ if (!analytics.uniqueVisitors[today]) analytics.uniqueVisitors[today] = [];
+ const vid = getVisitorId();
+ if (!analytics.uniqueVisitors[today].includes(vid)) analytics.uniqueVisitors[today].push(vid);
+ // Traffic source & device type (once per session)
+ const sourceKey = "navprep-session-tracked";
+ if (!sessionStorage.getItem(sourceKey)) {
+   if (!analytics.trafficSources) analytics.trafficSources = {};
+   const src = getTrafficSource();
+   analytics.trafficSources[src] = (analytics.trafficSources[src] || 0) + 1;
+   if (!analytics.deviceTypes) analytics.deviceTypes = {};
+   const dev = getDeviceType();
+   analytics.deviceTypes[dev] = (analytics.deviceTypes[dev] || 0) + 1;
+   try { sessionStorage.setItem(sourceKey, "1"); } catch {}
+   syncVisitMetaToFirestore(vid, src, dev, today);
+ }
  saveAnalytics(analytics);
  syncVisitToFirestore(); // fire-and-forget Firestore sync
 };
@@ -15234,7 +15292,7 @@ export default function App() {
  const AdminDashboardPage = () => {
  const [adminTab, setAdminTab] = useState("users"); // users | analytics | feedback | corrections
  const [users, setUsers] = useState({});
- const [analytics, setAnalytics] = useState({ totalVisits: 0, dailyHits: {}, loginHistory: [] });
+ const [analytics, setAnalytics] = useState({ totalVisits: 0, dailyHits: {}, loginHistory: [], uniqueVisitors: {}, trafficSources: {}, deviceTypes: {} });
  const [selectedUser, setSelectedUser] = useState(null);
  const [subForm, setSubForm] = useState({ plan: "free", days: 30, paymentRef: "" });
  const [firestoreStatus, setFirestoreStatus] = useState("loading"); // loading | connected | error
@@ -15268,10 +15326,24 @@ export default function App() {
  const firestoreAnalytics = await fetchAnalyticsFromFirestore();
  if (firestoreAnalytics) {
  const localAnalytics = localAuth.getAnalytics();
+ // Merge uniqueVisitors — convert Firestore date keys (YYYY_MM_DD) back to ISO (YYYY-MM-DD)
+ const fsUV = firestoreAnalytics.uniqueVisitors || {};
+ const normalizedUV = {};
+ Object.keys(fsUV).forEach(k => {
+   const isoKey = k.replace(/_/g, "-");
+   normalizedUV[isoKey] = fsUV[k] || [];
+ });
+ const mergedUV = { ...(localAnalytics.uniqueVisitors || {}) };
+ Object.keys(normalizedUV).forEach(k => {
+   mergedUV[k] = [...new Set([...(mergedUV[k] || []), ...normalizedUV[k]])];
+ });
  setAnalytics({
  totalVisits: Math.max(localAnalytics.totalVisits || 0, firestoreAnalytics.totalVisits || 0),
  dailyHits: { ...(localAnalytics.dailyHits || {}), ...(firestoreAnalytics.dailyHits || {}) },
- loginHistory: [...(localAnalytics.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp)
+ loginHistory: [...(localAnalytics.loginHistory || []), ...(firestoreAnalytics.loginHistory || [])].filter((v, i, a) => a.findIndex(t => t.timestamp === v.timestamp && t.email === v.email) === i).sort((a, b) => b.timestamp - a.timestamp),
+ uniqueVisitors: mergedUV,
+ trafficSources: { ...(localAnalytics.trafficSources || {}), ...(firestoreAnalytics.trafficSources || {}) },
+ deviceTypes: { ...(localAnalytics.deviceTypes || {}), ...(firestoreAnalytics.deviceTypes || {}) }
  });
  }
  } catch (err) {
@@ -15336,6 +15408,34 @@ export default function App() {
  const uniqueLoginsToday = analytics.loginHistory
  ? [...new Set(analytics.loginHistory.filter(h => h.date === new Date().toISOString().split("T")[0]).map(h => h.email))].length
  : 0;
+
+ // Active users today (logged in within last 24h)
+ const activeUsersToday = (() => {
+   const now = Date.now();
+   const day = 24 * 60 * 60 * 1000;
+   return [...new Set((analytics.loginHistory || []).filter(h => (now - h.timestamp) <= day).map(h => h.email))].length;
+ })();
+
+ // Unique visitors today & last 15 days
+ const todayKey = new Date().toISOString().split("T")[0];
+ const uniqueVisitorsToday = (analytics.uniqueVisitors?.[todayKey] || []).length;
+ const uniqueVisitors15Days = (() => {
+   const set = new Set();
+   for (let i = 0; i < 15; i++) {
+     const d = new Date(); d.setDate(d.getDate() - i);
+     const key = d.toISOString().split("T")[0];
+     (analytics.uniqueVisitors?.[key] || []).forEach(v => set.add(v));
+   }
+   return set.size;
+ })();
+
+ // Traffic sources (top entries)
+ const trafficSourcesSorted = Object.entries(analytics.trafficSources || {}).sort((a, b) => b[1] - a[1]);
+ const totalSourceHits = trafficSourcesSorted.reduce((sum, [, v]) => sum + v, 0);
+
+ // Device types
+ const deviceTypesSorted = Object.entries(analytics.deviceTypes || {}).sort((a, b) => b[1] - a[1]);
+ const totalDeviceHits = deviceTypesSorted.reduce((sum, [, v]) => sum + v, 0);
 
  const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
  const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
@@ -15419,11 +15519,76 @@ export default function App() {
  </div>
 
  {/* Top Stat Cards */}
- <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 28 }}>
+ <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
  <StatCard label="Total Users" value={totalUsers} color={theme.accent} icon="👥" />
+ <StatCard label="Active Users Today" value={activeUsersToday} color="#00BCD4" icon="⚡" sub="Logged-in (24h)" />
  <StatCard label="Logins Today" value={uniqueLoginsToday} color="#4CAF50" icon="🔑" sub={`${activeToday} total sessions`} />
+ <StatCard label="Unique Visitors Today" value={uniqueVisitorsToday} color="#FF5722" icon="🧍" />
+ <StatCard label="Unique Visitors (15d)" value={uniqueVisitors15Days} color="#3F51B5" icon="📅" sub="Last 15 days" />
  <StatCard label="Page Visits Today" value={todayHits} color="#FF9800" icon="👁" />
  <StatCard label="Total Visits" value={analytics.totalVisits || 0} color="#9C27B0" icon="📊" sub="All time" />
+ </div>
+
+ {/* Traffic Sources & Devices Row */}
+ <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 28 }}>
+   {/* Traffic Sources */}
+   <div style={{ ...css.card, padding: 16 }}>
+     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+       <span style={{ fontSize: 18 }}>🌐</span>
+       <span style={{ fontSize: 13, fontWeight: 700, color: theme.text, letterSpacing: 0.3 }}>Traffic Sources</span>
+     </div>
+     {trafficSourcesSorted.length === 0 ? (
+       <div style={{ fontSize: 12, color: theme.textMuted, textAlign: "center", padding: "16px 0" }}>No data yet</div>
+     ) : (
+       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+         {trafficSourcesSorted.slice(0, 8).map(([src, count]) => {
+           const pct = totalSourceHits ? Math.round((count / totalSourceHits) * 100) : 0;
+           const icons = { direct: "🔗", google: "🔍", facebook: "📘", whatsapp: "💬", telegram: "✈️", youtube: "▶️", instagram: "📷", linkedin: "💼", twitter: "🐦", bing: "🟦", quora: "🧠", reddit: "🤖" };
+           return (
+             <div key={src}>
+               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontSize: 11 }}>
+                 <span style={{ color: theme.text, fontWeight: 600, textTransform: "capitalize" }}>{icons[src] || "🔗"} {src}</span>
+                 <span style={{ color: theme.textMuted }}>{count} ({pct}%)</span>
+               </div>
+               <div style={{ height: 5, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderRadius: 4, overflow: "hidden" }}>
+                 <div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg, #00BCD4, #4A90E2)", borderRadius: 4 }} />
+               </div>
+             </div>
+           );
+         })}
+       </div>
+     )}
+   </div>
+
+   {/* Device Types */}
+   <div style={{ ...css.card, padding: 16 }}>
+     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+       <span style={{ fontSize: 18 }}>📱</span>
+       <span style={{ fontSize: 13, fontWeight: 700, color: theme.text, letterSpacing: 0.3 }}>Visitors by Device</span>
+     </div>
+     {deviceTypesSorted.length === 0 ? (
+       <div style={{ fontSize: 12, color: theme.textMuted, textAlign: "center", padding: "16px 0" }}>No data yet</div>
+     ) : (
+       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+         {deviceTypesSorted.map(([dev, count]) => {
+           const pct = totalDeviceHits ? Math.round((count / totalDeviceHits) * 100) : 0;
+           const icons = { desktop: "🖥️", mobile: "📱", tablet: "💻", unknown: "❓" };
+           const colors = { desktop: "#4A90E2", mobile: "#4CAF50", tablet: "#FF9800", unknown: "#9E9E9E" };
+           return (
+             <div key={dev}>
+               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
+                 <span style={{ color: theme.text, fontWeight: 600, textTransform: "capitalize" }}>{icons[dev] || "❓"} {dev}</span>
+                 <span style={{ color: theme.textMuted, fontWeight: 600 }}>{count} ({pct}%)</span>
+               </div>
+               <div style={{ height: 8, background: darkMode ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)", borderRadius: 5, overflow: "hidden" }}>
+                 <div style={{ width: `${pct}%`, height: "100%", background: colors[dev] || "#9E9E9E", borderRadius: 5 }} />
+               </div>
+             </div>
+           );
+         })}
+       </div>
+     )}
+   </div>
  </div>
 
  {/* Tab Row */}

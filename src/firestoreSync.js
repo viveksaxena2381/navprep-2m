@@ -119,6 +119,23 @@ export const syncVisitToFirestore = async () => {
   }
 };
 
+/** Sync visit metadata (unique visitor ID, traffic source, device type) */
+export const syncVisitMetaToFirestore = async (visitorId, source, device, today) => {
+  if (!isReady()) return;
+  try {
+    const todayKey = today.replace(/-/g, "_");
+    await setDoc(doc(db, "analytics", "global"), {
+      [`uniqueVisitors.${todayKey}`]: arrayUnion(visitorId),
+      [`trafficSources.${source}`]: increment(1),
+      [`deviceTypes.${device}`]: increment(1),
+      lastUpdated: Date.now()
+    }, { merge: true });
+    console.log("[Firestore] Visit meta synced:", { visitorId, source, device });
+  } catch (err) {
+    console.error("[Firestore] syncVisitMeta failed:", err.message);
+  }
+};
+
 /** Sync a login event — appends to loginHistory array */
 export const syncLoginToFirestore = async (email) => {
   if (!isReady()) return;
