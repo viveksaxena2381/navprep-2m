@@ -4,7 +4,40 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/anchor.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NavPrep 2M — 2nd Mate CoC</title>
+    <title>NavPrep 2M — 2nd Mate CoC Exam Prep</title>
+
+    <!-- Canonical URL — tells search engines & browsers the correct address -->
+    <link rel="canonical" href="https://navprep-2m.vercel.app/" />
+
+    <!-- SEO / Social -->
+    <meta name="description" content="NavPrep 2M — Complete exam preparation for DG Shipping 2nd Mate Foreign Going Certificate of Competency. Theory, oral Q&A, MCQs, formulas and more." />
+    <meta name="author" content="NavPrep 2M" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph (WhatsApp, Facebook previews) -->
+    <meta property="og:title" content="NavPrep 2M — 2nd Mate CoC Exam Prep" />
+    <meta property="og:description" content="Free exam prep for DG Shipping 2nd Mate F.G. Certificate — theory notes, oral scenarios, MCQ practice and formulas." />
+    <meta property="og:url" content="https://navprep-2m.vercel.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://navprep-2m.vercel.app/logo.png" />
+
+    <!-- Twitter / X card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="NavPrep 2M — 2nd Mate CoC Exam Prep" />
+    <meta name="twitter:description" content="Free exam prep for DG Shipping 2nd Mate F.G. Certificate." />
+    <meta name="twitter:image" content="https://navprep-2m.vercel.app/logo.png" />
+
+    <!-- Prevent www redirect loop — JS redirect if someone loads www.* version -->
+    <script>
+      (function() {
+        var h = window.location.hostname;
+        if (h.startsWith('www.')) {
+          window.location.replace(
+            window.location.href.replace('://' + h, '://' + h.slice(4))
+          );
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
