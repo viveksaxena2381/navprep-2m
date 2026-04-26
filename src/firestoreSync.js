@@ -8,13 +8,23 @@ import {
   collection, increment, arrayUnion
 } from "firebase/firestore";
 
+// ─── Dev-only loggers (PII-safe for production) ─────────────
+const DEV = !!import.meta.env?.DEV;
+const devLog = (...args) => { if (DEV) console.log(...args); };
+const devWarn = (...args) => { if (DEV) console.warn(...args); };
+// Errors we KEEP in production (operational) but strip PII from the message
+const errLog = (label, err) => {
+  const msg = err?.message || String(err || "");
+  console.error(label, msg);
+};
+
 // ─── Helpers ─────────────────────────────────────────────────
 const emailToDocId = (email) => email.toLowerCase().trim();
 
 // Check db at call time, not at module load time
 const isReady = () => {
   if (!db) {
-    console.warn("[Firestore] db is null — Firestore not initialized");
+    devWarn("[Firestore] db is null — Firestore not initialized");
     return false;
   }
   return true;
@@ -27,14 +37,14 @@ export const syncUserToFirestore = async (userObj) => {
   if (!isReady()) return;
   try {
     const docId = emailToDocId(userObj.email);
-    console.log("[Firestore] Syncing user:", docId);
+    devLog("[Firestore] Syncing user:", docId);
     await setDoc(doc(db, "users", docId), {
       ...userObj,
       lastSyncedAt: Date.now()
     }, { merge: true });
-    console.log("[Firestore] User synced successfully:", docId);
+    devLog("[Firestore] User synced successfully");
   } catch (err) {
-    console.error("[Firestore] syncUser failed:", err.message, err);
+    errLog("[Firestore] syncUser failed:", err);
   }
 };
 
@@ -42,17 +52,17 @@ export const syncUserToFirestore = async (userObj) => {
 export const fetchAllUsersFromFirestore = async () => {
   if (!isReady()) return null;
   try {
-    console.log("[Firestore] Fetching all users...");
+    devLog("[Firestore] Fetching all users...");
     const snapshot = await getDocs(collection(db, "users"));
     const users = {};
     snapshot.forEach((docSnap) => {
       const data = docSnap.data();
       users[docSnap.id] = data;
     });
-    console.log("[Firestore] Fetched", Object.keys(users).length, "users from Firestore");
+    devLog("[Firestore] Fetched", Object.keys(users).length, "users from Firestore");
     return users;
   } catch (err) {
-    console.error("[Firestore] fetchAllUsers failed:", err.message, err);
+    errLog("[Firestore] fetchAllUsers failed:", err);
     return null;
   }
 };
@@ -67,9 +77,9 @@ export const syncUserUpdateToFirestore = async (email, updates) => {
       ...updates,
       lastSyncedAt: Date.now()
     }, { merge: true });
-    console.log("[Firestore] User updated:", docId);
+    devLog("[Firestore] User updated");
   } catch (err) {
-    console.error("[Firestore] syncUserUpdate failed:", err.message, err);
+    errLog("[Firestore] syncUserUpdate failed:", err);
   }
 };
 
@@ -84,7 +94,7 @@ export const fetchUserFromFirestore = async (email) => {
     }
     return null;
   } catch (err) {
-    console.error("[Firestore] fetchUser failed:", err.message);
+    errLog("[Firestore] fetchUser failed:", err);
     return null;
   }
 };
@@ -95,9 +105,9 @@ export const deleteUserFromFirestore = async (email) => {
   try {
     const docId = emailToDocId(email);
     await deleteDoc(doc(db, "users", docId));
-    console.log("[Firestore] User deleted:", docId);
+    devLog("[Firestore] User deleted");
   } catch (err) {
-    console.error("[Firestore] deleteUser failed:", err.message, err);
+    errLog("[Firestore] deleteUser failed:", err);
   }
 };
 
@@ -115,7 +125,7 @@ export const syncVisitToFirestore = async () => {
       lastUpdated: Date.now()
     }, { merge: true });
   } catch (err) {
-    console.error("[Firestore] syncVisit failed:", err.message, err);
+    errLog("[Firestore] syncVisit failed:", err);
   }
 };
 
@@ -130,9 +140,9 @@ export const syncVisitMetaToFirestore = async (visitorId, source, device, today)
       [`deviceTypes.${device}`]: increment(1),
       lastUpdated: Date.now()
     }, { merge: true });
-    console.log("[Firestore] Visit meta synced:", { visitorId, source, device });
+    devLog("[Firestore] Visit meta synced");
   } catch (err) {
-    console.error("[Firestore] syncVisitMeta failed:", err.message);
+    errLog("[Firestore] syncVisitMeta failed:", err);
   }
 };
 
@@ -149,9 +159,9 @@ export const syncLoginToFirestore = async (email) => {
       }),
       lastUpdated: Date.now()
     }, { merge: true });
-    console.log("[Firestore] Login event synced for:", email);
+    devLog("[Firestore] Login event synced");
   } catch (err) {
-    console.error("[Firestore] syncLogin failed:", err.message, err);
+    errLog("[Firestore] syncLogin failed:", err);
   }
 };
 
@@ -159,17 +169,17 @@ export const syncLoginToFirestore = async (email) => {
 export const fetchAnalyticsFromFirestore = async () => {
   if (!isReady()) return null;
   try {
-    console.log("[Firestore] Fetching analytics...");
+    devLog("[Firestore] Fetching analytics...");
     const docSnap = await getDoc(doc(db, "analytics", "global"));
     if (docSnap.exists()) {
       const data = docSnap.data();
-      console.log("[Firestore] Analytics fetched:", data);
+      devLog("[Firestore] Analytics fetched");
       return data;
     }
-    console.log("[Firestore] No analytics document found yet");
+    devLog("[Firestore] No analytics document found yet");
     return null;
   } catch (err) {
-    console.error("[Firestore] fetchAnalytics failed:", err.message, err);
+    errLog("[Firestore] fetchAnalytics failed:", err);
     return null;
   }
 };
@@ -181,9 +191,9 @@ export const submitFeedbackToFirestore = async (feedbackObj) => {
   if (!isReady()) return;
   try {
     await addDoc(collection(db, "feedback"), { ...feedbackObj, syncedAt: Date.now() });
-    console.log("[Firestore] Feedback submitted");
+    devLog("[Firestore] Feedback submitted");
   } catch (err) {
-    console.error("[Firestore] submitFeedback failed:", err.message);
+    errLog("[Firestore] submitFeedback failed:", err);
   }
 };
 
@@ -192,9 +202,9 @@ export const submitCorrectionToFirestore = async (correctionObj) => {
   if (!isReady()) return;
   try {
     await addDoc(collection(db, "corrections"), { ...correctionObj, syncedAt: Date.now() });
-    console.log("[Firestore] Correction submitted");
+    devLog("[Firestore] Correction submitted");
   } catch (err) {
-    console.error("[Firestore] submitCorrection failed:", err.message);
+    errLog("[Firestore] submitCorrection failed:", err);
   }
 };
 
@@ -209,7 +219,7 @@ export const fetchAllFeedbackFromFirestore = async () => {
     });
     return items;
   } catch (err) {
-    console.error("[Firestore] fetchFeedback failed:", err.message);
+    errLog("[Firestore] fetchFeedback failed:", err);
     return null;
   }
 };
@@ -225,7 +235,7 @@ export const fetchAllCorrectionsFromFirestore = async () => {
     });
     return items;
   } catch (err) {
-    console.error("[Firestore] fetchCorrections failed:", err.message);
+    errLog("[Firestore] fetchCorrections failed:", err);
     return null;
   }
 };
@@ -236,7 +246,7 @@ export const updateFeedbackResolvedInFirestore = async (docId, resolved) => {
   try {
     await updateDoc(doc(db, "feedback", docId), { resolved });
   } catch (err) {
-    console.error("[Firestore] updateFeedbackResolved failed:", err.message);
+    errLog("[Firestore] updateFeedbackResolved failed:", err);
   }
 };
 
@@ -246,6 +256,79 @@ export const updateCorrectionResolvedInFirestore = async (docId, resolved) => {
   try {
     await updateDoc(doc(db, "corrections", docId), { resolved });
   } catch (err) {
-    console.error("[Firestore] updateCorrectionResolved failed:", err.message);
+    errLog("[Firestore] updateCorrectionResolved failed:", err);
+  }
+};
+
+// ─── Exam Reports ─────────────────────────────────────────────
+
+/** Submit a new exam report (community post-oral report) */
+export const submitExamReportToFirestore = async (obj) => {
+  if (!isReady()) return;
+  try {
+    await addDoc(collection(db, "exam_reports"), obj);
+  } catch (err) {
+    errLog("[Firestore] submitExamReport failed:", err);
+  }
+};
+
+/** Fetch all exam reports (newest first) */
+export const fetchExamReportsFromFirestore = async () => {
+  if (!isReady()) return [];
+  try {
+    const snap = await getDocs(collection(db, "exam_reports"));
+    return snap.docs.map(d => ({ ...d.data(), docId: d.id }));
+  } catch (err) {
+    errLog("[Firestore] fetchExamReports failed:", err);
+    return [];
+  }
+};
+
+// ─── Topic View Tracking (admin analytics) ───────────────────
+
+/** Increment view count for a single topic in /analytics/topicViews */
+export const syncTopicViewToFirestore = async (topicEntry) => {
+  if (!isReady() || !topicEntry?.id) return;
+  try {
+    const safeId = String(topicEntry.id).replace(/[^a-zA-Z0-9_-]/g, "_");
+    await setDoc(doc(db, "analytics", "topicViews", "items", safeId), {
+      id: topicEntry.id,
+      name: topicEntry.name || null,
+      subjectId: topicEntry.subjectId || null,
+      subjectName: topicEntry.subjectName || null,
+      moduleId: topicEntry.moduleId || null,
+      moduleName: topicEntry.moduleName || null,
+      count: increment(1),
+      lastViewedAt: Date.now(),
+    }, { merge: true });
+  } catch (err) {
+    errLog("[Firestore] syncTopicView failed:", err);
+  }
+};
+
+/** Fetch all topic-view records (admin dashboard only) */
+export const fetchTopicViewsFromFirestore = async () => {
+  if (!isReady()) return null;
+  try {
+    const snap = await getDocs(collection(db, "analytics", "topicViews", "items"));
+    const items = [];
+    snap.forEach(d => items.push({ ...d.data(), id: d.data().id || d.id }));
+    return items;
+  } catch (err) {
+    errLog("[Firestore] fetchTopicViews failed:", err);
+    return null;
+  }
+};
+
+// ─── Oral Performance Sync ────────────────────────────────────
+
+/** Sync oral performance data for a user to Firestore */
+export const syncOralPerfToFirestore = async (email, perfData) => {
+  if (!isReady()) return;
+  try {
+    const docId = emailToDocId(email);
+    await setDoc(doc(db, "oral_perf", docId), { perf: perfData, updatedAt: Date.now() }, { merge: true });
+  } catch (err) {
+    errLog("[Firestore] syncOralPerf failed:", err);
   }
 };

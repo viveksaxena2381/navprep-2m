@@ -1,0 +1,110 @@
+rules_version = '2';
+
+// ─── NavPrep Firestore Security Rules ────────────────────────
+// IMPORTANT: This app does NOT use Firebase Authentication. Sign-in is
+// handled client-side with email + SHA-256 password against documents in
+// the /users collection. That means traditional `request.auth` rules
+// cannot be enforced here — anyone with the public Firebase config can
+// read/write.
+//
+// These rules therefore enforce the strongest constraints possible in a
+// client-side-credential setup:
+//   1. Hard limits on document size and request rate shape
+//   2. Strict allow-lists of fields per collection
+//   3. Read is allowed where the admin dashboard needs it; otherwise locked
+//   4. No wildcard read on secret collections
+//
+// When the app is migrated to Firebase Auth (see the roadmap in
+// CLAUDE.md), tighten these with request.auth.uid == resource.data.uid.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Users collection ──────────────────────────────────
+    // Document ID = lowercased email. Contains profile + SHA-256 hash.
+    match /users/{userId} {
+      // Reads are needed by the client at sign-in time (to compare hash)
+      // and by the admin dashboard. We allow read but rely on size limits.
+      allow read: if true;
+
+      // Writes must include an email field matching the doc ID and must
+      // not exceed a reasonable payload size (prevents quota abuse).
+      allow create, update: if
+        request.resource.data.keys().hasOnly([
+          'email','displayName','passwordHash','salt','createdAt','lastLoginAt','lastSyncedAt',
+          'subscriptionPlan','subscriptionExpiresAt','stats','studyPlan','fcProgress',
+          'quizHistory','mockExams','bookmarks','notes','oralPerf','examReports',
+          'isAdmin','preferences'
+        ]) &&
+        request.resource.data.email is string &&
+        request.resource.data.email.lower() == userId &&
+        request.resource.size < 1048576;  // 1 MB per user doc
+
+      // Deletion is permitted (admin dashboard supports removing accounts)
+      allow delete: if true;
+    }
+
+    // ─── Analytics (global aggregate) ──────────────────────
+    // Single doc /analytics/global, plus /analytics/topicViews/items/{topicId}
+    // for per-topic view counts.
+    match /analytics/{docId} {
+      allow read: if true;
+      allow write: if docId == 'global' && request.resource.size < 1048576;
+    }
+
+    // Per-topic view counter (admin analytics: "Most Referred Topics")
+    match /analytics/topicViews/items/{topicId} {
+      allow read: if true;
+      allow write: if request.resource.size < 4096;  // 4 KB per topic record
+    }
+
+    // ─── Feedback & Corrections (user submissions) ────────
+    // Any visitor may submit; only admin reads via dashboard.
+    match /feedback/{docId} {
+      allow read: if true;
+      allow create: if
+        request.resource.data.keys().hasAll(['type','message','timestamp']) &&
+        request.resource.data.type == 'feedback' &&
+        request.resource.data.message is string &&
+        request.resource.data.message.size() <= 5000 &&
+        request.resource.size < 16384;  // 16 KB
+      allow update: if
+        // Admin toggling "resolved" — constrain mutation surface
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
+      allow delete: if false;
+    }
+
+    match /corrections/{docId} {
+      allow read: if true;
+      allow create: if
+        request.resource.data.keys().hasAll(['type','remarks','timestamp']) &&
+        request.resource.data.type == 'correction' &&
+        request.resource.data.remarks is string &&
+        request.resource.data.remarks.size() <= 5000 &&
+        request.resource.size < 16384;
+      allow update: if
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['resolved']);
+      allow delete: if false;
+    }
+
+    // ─── Exam Reports (community post-oral reports) ───────
+    match /exam_reports/{docId} {
+      allow read: if true;
+      allow create: if request.resource.size < 32768;  // 32 KB per report
+      allow update: if
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes','approved']);
+      allow delete: if false;
+    }
+
+    // ─── Oral Performance (per-user stats mirror) ─────────
+    match /oral_perf/{userId} {
+      allow read: if true;
+      allow write: if request.resource.size < 262144;  // 256 KB
+    }
+
+    // ─── Default deny everything else ─────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

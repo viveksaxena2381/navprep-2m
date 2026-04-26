@@ -38,6 +38,74 @@
         }
       })();
     </script>
+
+    <!-- ─── Content protection: print/selection/drag/save lockdown ─── -->
+    <style>
+      /* Disable text selection app-wide. Inputs/textareas re-enable below. */
+      html, body, #root {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;     /* iOS long-press menu */
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Re-enable selection inside form fields so users can type/edit */
+      input, textarea, select, [contenteditable="true"] {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        -ms-user-select: text;
+        user-select: text;
+      }
+      /* Block image dragging entirely */
+      img, video, canvas, svg {
+        -webkit-user-drag: none;
+        -khtml-user-drag: none;
+        -moz-user-drag: none;
+        -o-user-drag: none;
+        user-drag: none;
+        pointer-events: auto;
+      }
+      /* PRINT LOCKDOWN — blanks every page if someone forces print/Save-as-PDF */
+      @media print {
+        html, body, #root, * {
+          display: none !important;
+          visibility: hidden !important;
+          background: #000 !important;
+          color: #000 !important;
+        }
+        body::after {
+          content: "Printing of NavPrep 2M content is not permitted. This material is licensed for personal screen use only.";
+          display: block !important;
+          visibility: visible !important;
+          position: fixed !important;
+          inset: 0 !important;
+          background: #fff !important;
+          color: #000 !important;
+          font: 600 14pt sans-serif !important;
+          padding: 24pt !important;
+          text-align: center !important;
+        }
+      }
+      /* Forensic watermark layer — set by JS at runtime with user email */
+      #navprep-watermark {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2147483646;
+        opacity: 0.10;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        color: #475569;
+        background-repeat: repeat;
+        mix-blend-mode: multiply;
+      }
+      /* Defocus blur — applied by JS when window loses focus */
+      .navprep-defocus #root {
+        filter: blur(20px) saturate(0.4);
+        transition: filter 0.15s ease;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

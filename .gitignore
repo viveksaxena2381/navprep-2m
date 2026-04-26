@@ -23,7 +23,6 @@ apply_*.mjs
 enrich_*.js
 temp_ror_pages/
 src/_insert_*.js
-src/firebase.js
 
 # Original unoptimized logo backup
 public/logo_original_1024.png
@@ -34,3 +33,26 @@ public/logo_original_1024.png
 # Environment
 .env
 .env.local
+
+.vercel
+
+# One-off PDF / content-build dev scripts (root-level)
+analyze_entries.py
+apply_batch*.py
+clean_orals.py
+extract_batch*.py
+find_incomplete.py
+fix_*.py
+fix_range.cjs
+insert_bridge_module.py
+scan_orals.py
+summarize_incomplete.py
+trim_batch*.py
+batch*_content.json
+batch*_stubs.txt
+incomplete_*.txt
+orals_flagged.csv
+colregs_headon.png
+
+# Promo / marketing assets — large media, not part of the app
+promo/

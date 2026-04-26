@@ -4,6 +4,10 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
+const DEV = !!import.meta.env?.DEV;
+const devLog = (...args) => { if (DEV) console.log(...args); };
+const devWarn = (...args) => { if (DEV) console.warn(...args); };
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -24,23 +28,20 @@ const isConfigured = firebaseConfig.apiKey &&
 let db = null;
 let initError = null;
 
-console.log("[Firebase] Config check — apiKey present:", !!firebaseConfig.apiKey, "projectId:", firebaseConfig.projectId || "MISSING");
+devLog("[Firebase] Config check — apiKey present:", !!firebaseConfig.apiKey, "projectId:", firebaseConfig.projectId || "MISSING");
 
 if (isConfigured) {
   try {
     const app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    console.log("[Firebase] Firestore initialized successfully for project:", firebaseConfig.projectId);
+    devLog("[Firebase] Firestore initialized successfully for project:", firebaseConfig.projectId);
   } catch (err) {
     initError = err;
+    // Keep errors visible in production (they're useful for ops) but drop the stack
     console.error("[Firebase] Init failed:", err.message);
   }
 } else {
-  console.warn("[Firebase] Not configured — running in localStorage-only mode. Config:", {
-    hasApiKey: !!firebaseConfig.apiKey,
-    hasProjectId: !!firebaseConfig.projectId,
-    apiKeyPrefix: firebaseConfig.apiKey ? firebaseConfig.apiKey.substring(0, 8) + "..." : "missing"
-  });
+  devWarn("[Firebase] Not configured — running in localStorage-only mode.");
 }
 
 export { db, initError };

@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Component } from "react";
 import { SUBJECTS, ORAL_SCENARIOS } from "./data.js";
 import { ROR_NIGHT_CARDS, ROR_DAY_CARDS } from "./rorCardsData.js";
+import { LIGHTS_QUIZ } from "./lightsQuizData.js";
+import { FLASHCARD_DECKS } from "./flashcardsData.js";
 import { TOPIC_ENRICHMENTS, DOC_MOCKUPS } from "./imageData.js";
-import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncVisitMetaToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore } from "./firestoreSync.js";
+import { syncUserToFirestore, fetchAllUsersFromFirestore, fetchUserFromFirestore, syncUserUpdateToFirestore, deleteUserFromFirestore, syncVisitToFirestore, syncVisitMetaToFirestore, syncLoginToFirestore, fetchAnalyticsFromFirestore, submitFeedbackToFirestore, submitCorrectionToFirestore, fetchAllFeedbackFromFirestore, fetchAllCorrectionsFromFirestore, updateFeedbackResolvedInFirestore, updateCorrectionResolvedInFirestore, submitExamReportToFirestore, fetchExamReportsFromFirestore, syncOralPerfToFirestore, syncTopicViewToFirestore, fetchTopicViewsFromFirestore } from "./firestoreSync.js";
 
 // ─── Local Auth Helpers (no backend needed) ─────────────────
 const AUTH_STORAGE_KEY = "navprep-users";
@@ -36,6 +38,69 @@ const saveStoredCorrections = (data) => {
  try { localStorage.setItem(CORRECTIONS_STORAGE_KEY, JSON.stringify(data)); } catch {}
 };
 const generateId = (prefix) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+// ─── Oral Performance Tracking ────────────────────────────────
+const ORAL_PERF_KEY = 'navprep-oral-perf';
+const getOralPerf = () => { try { return JSON.parse(localStorage.getItem(ORAL_PERF_KEY)) || {}; } catch { return {}; } };
+const saveOralPerf = (d) => { try { localStorage.setItem(ORAL_PERF_KEY, JSON.stringify(d)); } catch {} };
+// result: 'correct' | 'partial' | 'wrong'
+const oralPerfUpdate = (perf, qid, result) => {
+  const prev = perf[qid] || { correct: 0, partial: 0, wrong: 0, streak: 0, interval: 0, lastResult: null, lastSeen: null, nextReview: null };
+  const streak = result === 'correct' ? (prev.streak || 0) + 1 : result === 'wrong' ? 0 : Math.max(0, (prev.streak || 0) - 1);
+  const interval = result === 'correct' ? Math.min(30, streak <= 1 ? 1 : streak === 2 ? 3 : Math.round((prev.interval || 1) * 1.8)) : result === 'partial' ? 1 : 0;
+  return { ...prev, [result]: (prev[result] || 0) + 1, streak, interval, lastResult: result, lastSeen: Date.now(), nextReview: Date.now() + interval * 86400000 };
+};
+
+// ─── Exam Reports ─────────────────────────────────────────────
+const EXAM_REPORTS_KEY = 'navprep-exam-reports';
+const getExamReports = () => { try { return JSON.parse(localStorage.getItem(EXAM_REPORTS_KEY)) || []; } catch { return []; } };
+const saveExamReports = (d) => { try { localStorage.setItem(EXAM_REPORTS_KEY, JSON.stringify(d)); } catch {} };
+
+// ─── Study Plan ───────────────────────────────────────────────
+const STUDY_PLAN_KEY = 'navprep-study-plan';
+const getStudyPlan = () => { try { return JSON.parse(localStorage.getItem(STUDY_PLAN_KEY)) || null; } catch { return null; } };
+const saveStudyPlan = (d) => { try { localStorage.setItem(STUDY_PLAN_KEY, JSON.stringify(d)); } catch {} };
+
+// ─── MMD Tags (per question) ──────────────────────────────────
+const MMD_TAGS_KEY = 'navprep-mmd-tags';
+const getMMDTags = () => { try { return JSON.parse(localStorage.getItem(MMD_TAGS_KEY)) || {}; } catch { return {}; } };
+const saveMMDTags = (d) => { try { localStorage.setItem(MMD_TAGS_KEY, JSON.stringify(d)); } catch {} };
+
+// Build study plan given an exam date (ISO string) and available categories
+const buildStudyPlan = (examDateStr) => {
+  const examTs = new Date(examDateStr).getTime();
+  const now = Date.now();
+  const daysLeft = Math.max(1, Math.round((examTs - now) / 86400000));
+  const weeks = Math.ceil(daysLeft / 7);
+  const schedule = [
+    { label: "F1 — COLREGS Rules 1–19", cats: ["F1 COLREGS / ROR"] },
+    { label: "F1 — Navigation, Watchkeeping & Radar", cats: ["F1 Navigation General", "F1 Anchoring & Watchkeeping", "F1 Radar & Electronics", "F1 ECDIS"] },
+    { label: "F1 — Lights, Shapes & Signals", cats: ["F1 Lights, Shapes & Signals"] },
+    { label: "F2 — Cargo Stowage & Securing", cats: ["F2 Cargo Stowage & Securing"] },
+    { label: "F3 — MARPOL, SOLAS & Safety", cats: ["F3 MARPOL & Pollution Prevention", "F3 SOLAS & Conventions", "F3 Safety General"] },
+    { label: "F3 — Stability, LSA & Fire", cats: ["F3 Ship Stability", "F3 LSA & Survival Equipment", "F3 Fire Fighting & Detection"] },
+    { label: "F3 — Surveys, Certificates & Revision", cats: ["F3 Surveys & Certificates"] },
+    { label: "Mock Orals — All Topics", cats: [] },
+  ];
+  return { examDate: examDateStr, createdAt: now, daysLeft, weeks, schedule: schedule.slice(0, Math.max(weeks, 1)) };
+};
+
+// ─── Flashcard Progress ───────────────────────────────────────
+const FC_KEY = 'navprep-flashcards';
+const getFCProgress = () => { try { return JSON.parse(localStorage.getItem(FC_KEY)) || {}; } catch { return {}; } };
+const saveFCProgress = (d) => { try { localStorage.setItem(FC_KEY, JSON.stringify(d)); } catch {} };
+
+// ─── SRS (Spaced Repetition System) ──────────────────────────
+const SRS_KEY = 'navprep-srs';
+const getSRS = () => { try { return JSON.parse(localStorage.getItem(SRS_KEY)) || {}; } catch { return {}; } };
+const saveSRS = (d) => { try { localStorage.setItem(SRS_KEY, JSON.stringify(d)); } catch {} };
+// SM-2 simplified: quality 5=perfect recall, 3=correct but hesitant, 0=forgot
+const sm2Update = (card, quality) => {
+ const ef = Math.max(1.3, (card?.easeFactor || 2.5) + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+ const reps = quality < 3 ? 0 : (card?.reps || 0) + 1;
+ const interval = quality < 3 ? 1 : reps === 1 ? 1 : reps === 2 ? 3 : Math.round((card?.interval || 1) * ef);
+ return { interval, easeFactor: ef, reps, dueDate: Date.now() + interval * 86400000, lastReviewed: Date.now() };
+};
 
 // Get or create unique visitor ID (stored in localStorage)
 const VISITOR_ID_KEY = "navprep-visitor-id";
@@ -104,6 +169,30 @@ const trackVisit = () => {
  }
  saveAnalytics(analytics);
  syncVisitToFirestore(); // fire-and-forget Firestore sync
+};
+
+// Track which topic the user opened — populates the "Most Referred Topics"
+// section in the admin analytics dashboard. Stored as a flat map keyed by
+// topicId so we can rank by view count without scanning a large array.
+const trackTopicView = (topic, subject, mod) => {
+ if (!topic || !topic.id) return;
+ try {
+   const analytics = getAnalytics();
+   if (!analytics.topicViews) analytics.topicViews = {};
+   const prev = analytics.topicViews[topic.id] || { count: 0 };
+   analytics.topicViews[topic.id] = {
+     id: topic.id,
+     name: topic.name || prev.name || topic.id,
+     subjectId: subject?.id || prev.subjectId || null,
+     subjectName: subject?.name || prev.subjectName || null,
+     moduleId: mod?.id || prev.moduleId || null,
+     moduleName: mod?.name || prev.moduleName || null,
+     count: (prev.count || 0) + 1,
+     lastViewedAt: Date.now(),
+   };
+   saveAnalytics(analytics);
+   syncTopicViewToFirestore(analytics.topicViews[topic.id]);
+ } catch { /* analytics is fire-and-forget; never break navigation on a write fail */ }
 };
 
 // Track a login event
@@ -491,13 +580,93 @@ const _OLD_ORAL_SCENARIOS = [
 
 // ─── HELPER FUNCTIONS ─────────────────────────────────────────
 const getAllTopics = () => SUBJECTS.flatMap(s => s.modules.flatMap(m => m.topics));
+
+// ── Global TTS helper — Indian male heavy voice on iPhone, best available elsewhere ──
+const speakText = (() => {
+ let current = null;
+ return (text) => {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  current = new SpeechSynthesisUtterance(text);
+  current.lang = 'en-IN';
+  current.rate = 0.78;   // deliberate, measured
+  current.pitch = 0.55;  // deep, authoritative
+  current.volume = 1;
+  const assignVoice = () => {
+   const voices = window.speechSynthesis.getVoices();
+   const priority = ['rishi','ravi','neel','mohan','arjun','karan'];
+   let voice = null;
+   for (const name of priority) { voice = voices.find(v => v.name.toLowerCase().includes(name)); if (voice) break; }
+   if (!voice) voice = voices.find(v => v.lang === 'en-IN');
+   if (!voice) voice = voices.find(v => v.lang.startsWith('en') && ['daniel','david','james','george','mark'].some(n => v.name.toLowerCase().includes(n)));
+   if (voice) current.voice = voice;
+   window.speechSynthesis.speak(current);
+  };
+  if (window.speechSynthesis.getVoices().length > 0) assignVoice();
+  else window.speechSynthesis.onvoiceschanged = assignVoice;
+ };
+})();
+
+// Small inline TTS button component
+const SpeakBtn = ({ text, style = {} }) => {
+ const [speaking, setSpeaking] = useState(false);
+ const speak = (e) => {
+  e.stopPropagation();
+  if (speaking) { window.speechSynthesis.cancel(); setSpeaking(false); return; }
+  setSpeaking(true);
+  if (!window.speechSynthesis) { setSpeaking(false); return; }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'en-IN'; utter.rate = 0.78; utter.pitch = 0.55; utter.volume = 1;
+  utter.onend = () => setSpeaking(false);
+  utter.onerror = () => setSpeaking(false);
+  const assignVoice = () => {
+   const voices = window.speechSynthesis.getVoices();
+   const priority = ['rishi','ravi','neel','mohan','arjun','karan'];
+   let voice = null;
+   for (const name of priority) { voice = voices.find(v => v.name.toLowerCase().includes(name)); if (voice) break; }
+   if (!voice) voice = voices.find(v => v.lang === 'en-IN');
+   if (!voice) voice = voices.find(v => v.lang.startsWith('en') && ['daniel','david','james','george','mark'].some(n => v.name.toLowerCase().includes(n)));
+   if (voice) utter.voice = voice;
+   window.speechSynthesis.speak(utter);
+  };
+  if (window.speechSynthesis.getVoices().length > 0) assignVoice();
+  else window.speechSynthesis.onvoiceschanged = assignVoice;
+ };
+ return (
+  <button onClick={speak} title={speaking ? "Stop" : "Read aloud"}
+   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
+    fontSize: 16, opacity: speaking ? 1 : 0.45, transition: 'opacity 0.2s',
+    color: speaking ? '#7B4FA8' : 'inherit', flexShrink: 0, lineHeight: 1, ...style }}>
+   {speaking ? '🔊' : '🔈'}
+  </button>
+ );
+};
 const getAllMCQs = () => getAllTopics().flatMap(t => (t.mcqs||[]).map(q => ({ ...q, topicId: t.id, topicName: t.name })));
+// Rich version with subject, module, and unique id — used by MockExam and SRS
+const getAllMCQsRich = () => SUBJECTS.flatMap(subj =>
+ subj.modules.flatMap(mod =>
+  mod.topics.flatMap((topic, _ti) =>
+   (topic.mcqs || []).map((q, idx) => ({
+    id: `${topic.id}_q${idx}`,
+    q: q.q, options: q.options,
+    correct: q.correct !== undefined ? q.correct : q.answer,
+    explanation: q.explanation || '',
+    topicId: topic.id, topicName: topic.name,
+    moduleId: mod.id, moduleName: mod.name,
+    subjectId: subj.id, subjectName: subj.name,
+    subjectColor: subj.color, subjectIcon: subj.icon,
+   }))
+  )
+ )
+);
 
 // ─── STYLES ───────────────────────────────────────────────────
 const fonts = `
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=DM+Serif+Display&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes goldShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+@keyframes shimmer { 0% { background-position: 0% 50%; } 100% { background-position: 300% 50%; } }
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
@@ -555,7 +724,21 @@ export default function App() {
  }, []);
 
  const isAdmin = currentUser?.email === ADMIN_EMAIL;
- const handleLogout = () => { localAuth.signOut(); setCurrentUser(null); };
+ const handleLogout = () => {
+   localAuth.signOut();
+   setCurrentUser(null);
+   // If user was on admin page, kick them out so the URL-state is clean
+   setPage(prev => (prev === "admin" ? "home" : prev));
+ };
+
+ // ─── Defense-in-depth: bounce non-admins off /admin immediately ───
+ // Covers logout-while-on-admin, session expiry, and any future code path
+ // that sets page === "admin" without verifying isAdmin first.
+ useEffect(() => {
+   if (page === "admin" && !isAdmin) {
+     setPage("home");
+   }
+ }, [page, isAdmin]);
 
  // ─── Auto-logout after 30 minutes of inactivity ───
  useEffect(() => {
@@ -589,52 +772,141 @@ export default function App() {
  const isMobile = windowWidth < 640;
  const isTablet = windowWidth >= 640 && windowWidth < 1024;
 
- // ─── Content Protection ───
+ // ─── Content Protection (hardened deterrence + forensic watermark) ───
+ // NOTE: 100% screenshot prevention is not possible in a web browser
+ // (OS-level capture happens outside JS). This layer makes copying
+ // painful and watermarks every view with the user's email so any
+ // leaked screenshot is forensically traceable to the leaker.
  useEffect(() => {
- // Block right-click context menu
- const blockContext = (e) => { e.preventDefault(); return false; };
- // Block keyboard shortcuts: Print, Save, Copy, Select All, View Source, DevTools
+ // ── Right-click / context menu ──
+ const blockContext = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
+
+ // ── Keyboard shortcut blocker ──
  const blockKeys = (e) => {
- const tag = (e.target.tagName || '').toLowerCase();
- const isInput = tag === 'input' || tag === 'textarea' || tag === 'select';
- // Ctrl+P (print), Ctrl+S (save), Ctrl+U (view source) — always block
- if ((e.ctrlKey || e.metaKey) && ['p','s','u'].includes(e.key.toLowerCase())) { e.preventDefault(); return false; }
- // Ctrl+Shift+I/J/C (DevTools)
- if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c'].includes(e.key.toLowerCase())) { e.preventDefault(); return false; }
- // Ctrl+C (copy), Ctrl+A (select all) — allow inside inputs
- if (!isInput && (e.ctrlKey || e.metaKey) && ['c','a'].includes(e.key.toLowerCase())) { e.preventDefault(); return false; }
- // F12 (DevTools)
- if (e.key === 'F12') { e.preventDefault(); return false; }
- // PrintScreen
- if (e.key === 'PrintScreen') { e.preventDefault(); navigator.clipboard.writeText('').catch(()=>{}); return false; }
- };
- // Block drag (prevent dragging images/content out)
- const blockDrag = (e) => { e.preventDefault(); return false; };
- // Blur content when window loses focus (anti-screenshot for tab switching)
- const handleVisChange = () => {
- const el = document.getElementById('navprep-root');
- if (el) el.style.filter = document.hidden ? 'blur(30px)' : 'none';
- };
- // Block print via beforeprint
- const blockPrint = () => {
- document.body.style.display = 'none';
- setTimeout(() => { document.body.style.display = ''; }, 100);
+   const tag = (e.target.tagName || '').toLowerCase();
+   const isInput = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+   const k = (e.key || '').toLowerCase();
+   const ctrl = e.ctrlKey || e.metaKey;
+   // Ctrl+P (print), Ctrl+S (save), Ctrl+U (view source), Ctrl+Shift+P (print preview)
+   if (ctrl && ['p','s','u'].includes(k)) { e.preventDefault(); return false; }
+   // Ctrl+Shift+I / J / C / K (DevTools across browsers)
+   if (ctrl && e.shiftKey && ['i','j','c','k'].includes(k)) { e.preventDefault(); return false; }
+   // F12 (DevTools)
+   if (e.key === 'F12') { e.preventDefault(); return false; }
+   // Ctrl+C / Ctrl+X / Ctrl+A — allow inside inputs only
+   if (!isInput && ctrl && ['c','x','a'].includes(k)) { e.preventDefault(); return false; }
+   // PrintScreen — try to clear clipboard (best-effort; OS can still snapshot)
+   if (e.key === 'PrintScreen' || k === 'printscreen') {
+     e.preventDefault();
+     try { navigator.clipboard.writeText('').catch(()=>{}); } catch {}
+     // Brief flash to signal capture was attempted
+     document.documentElement.classList.add('navprep-defocus');
+     setTimeout(() => document.documentElement.classList.remove('navprep-defocus'), 600);
+     return false;
+   }
+   // Win+Shift+S (Snipping Tool on Windows) — best-effort, OS owns this
+   if (e.shiftKey && (e.metaKey || e.key === 'Meta') && k === 's') {
+     document.documentElement.classList.add('navprep-defocus');
+     setTimeout(() => document.documentElement.classList.remove('navprep-defocus'), 600);
+   }
  };
 
+ // ── Block drag, copy, cut, selectstart globally ──
+ const blockDrag = (e) => { e.preventDefault(); return false; };
+ const blockCopy = (e) => {
+   const tag = (e.target?.tagName || '').toLowerCase();
+   const isInput = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
+   if (!isInput) {
+     e.preventDefault();
+     try { e.clipboardData?.setData('text/plain', ''); } catch {}
+     return false;
+   }
+ };
+ const blockSelectStart = (e) => {
+   const tag = (e.target?.tagName || '').toLowerCase();
+   if (tag !== 'input' && tag !== 'textarea' && !e.target?.isContentEditable) {
+     e.preventDefault();
+     return false;
+   }
+ };
+
+ // ── Visibility / focus blur (deters snipping-tool workflows) ──
+ const root = () => document.documentElement;
+ const handleVisChange = () => {
+   if (document.hidden) root().classList.add('navprep-defocus');
+   else root().classList.remove('navprep-defocus');
+ };
+ const handleBlur = () => root().classList.add('navprep-defocus');
+ const handleFocus = () => root().classList.remove('navprep-defocus');
+
+ // ── Print blocker (defense in depth — CSS @media print already blanks) ──
+ const blockPrint = (e) => {
+   e?.preventDefault?.();
+   document.body.style.visibility = 'hidden';
+   setTimeout(() => { document.body.style.visibility = ''; }, 800);
+ };
+ // Override window.print so JS-triggered print is also stopped
+ try { window.print = () => { /* disabled */ }; } catch {}
+
+ // ── DevTools open detector (size-diff heuristic + debugger trick) ──
+ // If DevTools is docked, outer-inner gap exceeds threshold. Not foolproof
+ // (undocked DevTools defeats it) but catches the casual case.
+ let devToolsOpen = false;
+ const checkDevTools = () => {
+   const widthGap  = window.outerWidth  - window.innerWidth;
+   const heightGap = window.outerHeight - window.innerHeight;
+   const opened = widthGap > 200 || heightGap > 200;
+   if (opened !== devToolsOpen) {
+     devToolsOpen = opened;
+     if (opened) root().classList.add('navprep-defocus');
+     else root().classList.remove('navprep-defocus');
+   }
+ };
+ const devToolsTimer = setInterval(checkDevTools, 1000);
+
+ // ── Forensic watermark (tile user email + timestamp across screen) ──
+ // Anyone who screenshots → their email is on the screenshot.
+ const stamp = (currentUser?.email || 'guest') + '  ·  ' + new Date().toISOString().slice(0,10);
+ const svg =
+   `<svg xmlns='http://www.w3.org/2000/svg' width='460' height='240'>` +
+     `<text x='10' y='130' fill='%23475569' font-family='system-ui,sans-serif' font-size='14' ` +
+     `transform='rotate(-28 230 120)' opacity='0.55'>${encodeURIComponent(stamp).replace(/'/g, '%27')}</text>` +
+   `</svg>`;
+ const dataUrl = `url("data:image/svg+xml;utf8,${svg}")`;
+ let wm = document.getElementById('navprep-watermark');
+ if (!wm) {
+   wm = document.createElement('div');
+   wm.id = 'navprep-watermark';
+   document.body.appendChild(wm);
+ }
+ wm.style.backgroundImage = dataUrl;
+
+ // ── Wire listeners ──
  document.addEventListener('contextmenu', blockContext);
- document.addEventListener('keydown', blockKeys);
+ document.addEventListener('keydown', blockKeys, true);
  document.addEventListener('dragstart', blockDrag);
+ document.addEventListener('copy', blockCopy);
+ document.addEventListener('cut', blockCopy);
+ document.addEventListener('selectstart', blockSelectStart);
  document.addEventListener('visibilitychange', handleVisChange);
+ window.addEventListener('blur', handleBlur);
+ window.addEventListener('focus', handleFocus);
  window.addEventListener('beforeprint', blockPrint);
 
  return () => {
- document.removeEventListener('contextmenu', blockContext);
- document.removeEventListener('keydown', blockKeys);
- document.removeEventListener('dragstart', blockDrag);
- document.removeEventListener('visibilitychange', handleVisChange);
- window.removeEventListener('beforeprint', blockPrint);
+   document.removeEventListener('contextmenu', blockContext);
+   document.removeEventListener('keydown', blockKeys, true);
+   document.removeEventListener('dragstart', blockDrag);
+   document.removeEventListener('copy', blockCopy);
+   document.removeEventListener('cut', blockCopy);
+   document.removeEventListener('selectstart', blockSelectStart);
+   document.removeEventListener('visibilitychange', handleVisChange);
+   window.removeEventListener('blur', handleBlur);
+   window.removeEventListener('focus', handleFocus);
+   window.removeEventListener('beforeprint', blockPrint);
+   clearInterval(devToolsTimer);
  };
- }, []);
+ }, [currentUser?.email]);
 
  useEffect(() => {
  try { localStorage.setItem("dg-progress", JSON.stringify(progress)); } catch {}
@@ -683,6 +955,11 @@ export default function App() {
  if (topic !== undefined) setSelectedTopic(topic);
  setQuizState(null);
  window.scrollTo(0, 0);
+ // Track which topic users open most often — admins see this in
+ // Analytics → Most Referred Topics. Only count actual topic views.
+ if (pg === "topic" && topic && topic.id) {
+   trackTopicView(topic, subject || selectedSubject, mod || selectedModule);
+ }
  };
 
  // ── Back to Main button (top-left, goes to subject page or home) ──
@@ -1369,7 +1646,10 @@ export default function App() {
  <div style={{ width: 26, height: 26, borderRadius: 7, background: `${col}18`, border: `1px solid ${col}28`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: col, fontWeight: 700 }}>✏</div>
  <span style={{ fontSize: 10, fontWeight: 700, color: col, textTransform: 'uppercase', letterSpacing: 1.2 }}>Practice Question</span>
  </div>
- <p style={{ fontWeight: 600, marginBottom: 14, fontSize: 14.5, lineHeight: 1.65, color: theme.text, margin: "0 0 14px" }}>{q.q || q.question}</p>
+ <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: "0 0 14px" }}>
+ <p style={{ fontWeight: 600, fontSize: 14.5, lineHeight: 1.65, color: theme.text, margin: 0, flex: 1 }}>{q.q || q.question}</p>
+ <SpeakBtn text={q.q || q.question} />
+ </div>
  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
  {q.options.map((opt, i) => {
  const letter = String.fromCharCode(65 + i);
@@ -1774,7 +2054,7 @@ export default function App() {
  {/* Storm track arrow — pointing upward (poleward movement) */}
  <line x1={cx} y1={cy - R - 8} x2={cx} y2={cy - R - 38}
  stroke="#333" strokeWidth="2.5" markerEnd="url(#arrowBlackTRS)" />
- <text x={cx} y={cy - R - 44} textAnchor="middle" fontSize="11" fill="#333" fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">STORM TRACK (poleward)</text>
+ <text x={cx} y={cy - R - 44} textAnchor="middle" fontSize="9" fill="#333" fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">STORM TRACK (poleward)</text>
 
  {/* Dangerous semicircle — correct full half */}
  <path d={dangerPath} fill="#FF6B6B" opacity="0.20" />
@@ -1795,7 +2075,7 @@ export default function App() {
 
  {/* Eye */}
  <circle cx={cx} cy={cy} r="18" fill="#FFF9C4" stroke="#FBC02D" strokeWidth="2.5" />
- <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fill="#E65100" fontWeight="bold">EYE</text>
+ <text x={cx} y={cy + 4} textAnchor="middle" fontSize="8" fill="#E65100" fontWeight="bold">EYE</text>
 
  {/* Tangential wind arrows */}
  {windArrows.map((a, i) => (
@@ -1808,24 +2088,24 @@ export default function App() {
  stroke="#555" strokeWidth="1.5" strokeDasharray="6,3" />
 
  {/* Dangerous label */}
- <text x={dangerX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#B71C1C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">DANGEROUS</text>
- <text x={dangerX} y={cy - 3} textAnchor="middle" fontSize="10" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
- <text x={dangerX} y={cy + 13} textAnchor="middle" fontSize="9.5" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(E — right of track)' : '(W — left of track)'}</text>
+ <text x={dangerX} y={cy - 18} textAnchor="middle" fontSize="10" fill="#B71C1C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">DANGEROUS</text>
+ <text x={dangerX} y={cy - 3} textAnchor="middle" fontSize="8" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
+ <text x={dangerX} y={cy + 13} textAnchor="middle" fontSize="7.5" fill="#B71C1C" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(E — right of track)' : '(W — left of track)'}</text>
 
  {/* Navigable label */}
- <text x={navX} y={cy - 18} textAnchor="middle" fontSize="12" fill="#1B5E20" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">NAVIGABLE</text>
- <text x={navX} y={cy - 3} textAnchor="middle" fontSize="10" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
- <text x={navX} y={cy + 13} textAnchor="middle" fontSize="9.5" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(W — left of track)' : '(E — right of track)'}</text>
+ <text x={navX} y={cy - 18} textAnchor="middle" fontSize="10" fill="#1B5E20" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">NAVIGABLE</text>
+ <text x={navX} y={cy - 3} textAnchor="middle" fontSize="8" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">SEMICIRCLE</text>
+ <text x={navX} y={cy + 13} textAnchor="middle" fontSize="7.5" fill="#1B5E20" fontFamily="'Segoe UI',system-ui,sans-serif">{isNH ? '(W — left of track)' : '(E — right of track)'}</text>
 
  {/* Rotation direction */}
- <text x={cx} y={cy + R + 20} textAnchor="middle" fontSize="11" fill="#555">
+ <text x={cx} y={cy + R + 20} textAnchor="middle" fontSize="9" fill="#555">
  {isNH ? 'Rotation: ANTICLOCKWISE (NH)' : 'Rotation: CLOCKWISE (SH)'}
  </text>
 
  {/* Buys Ballot box */}
  <rect x="10" y={cy + R + 30} width="480" height="40" rx="6" fill="#FFF3E0" stroke="#FF6F00" strokeWidth="1.5" />
- <text x="20" y={cy + R + 48} fontSize="11" fill="#E65100" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Buys Ballot's Law:</text>
- <text x="20" y={cy + R + 64} fontSize="10.5" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif">
+ <text x="20" y={cy + R + 48} fontSize="9" fill="#E65100" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Buys Ballot's Law:</text>
+ <text x="20" y={cy + R + 64} fontSize="8.5" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif">
  {isNH ? 'Face the wind → storm centre is ~10° abaft your RIGHT hand'
  : 'Face the wind → storm centre is ~10° abaft your LEFT hand'}
  </text>
@@ -1895,7 +2175,7 @@ export default function App() {
  return (
  <g key={i}>
  <line x1={50} y1={y} x2={W-50} y2={y} stroke="#888" strokeWidth="1" strokeDasharray="3,3"/>
- <text x={46} y={y+4} textAnchor="end" fontSize="10" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="500">{b.lat}°</text>
+ <text x={46} y={y+4} textAnchor="end" fontSize="8" fill="#333" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="500">{b.lat}°</text>
  </g>
  );
  })}
@@ -1906,7 +2186,7 @@ export default function App() {
  const arrowChar = sys.dir === 'W' ? '→' : '←';
  return (
  <g key={i}>
- <text x={W/2} y={yMid+4} textAnchor="middle" fontSize="11" fill={sys.color} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.3">
+ <text x={W/2} y={yMid+4} textAnchor="middle" fontSize="9" fill={sys.color} fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.3">
  {arrowChar} {sys.name} {arrowChar}
  </text>
  </g>
@@ -1922,12 +2202,12 @@ export default function App() {
  {/* Rising at ITCZ, sinking at 30° */}
  <path d={`M ${W-60} ${latY(0)} Q ${W-40} ${latY(15)} ${W-60} ${latY(30)}`}
  fill="none" stroke="#E06C00" strokeWidth="1.5" strokeDasharray="4,3" opacity="0.6"/>
- <text x={W-30} y={latY(15)+4} fontSize="9" fill="#E06C00" textAnchor="middle" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">Hadley</text>
+ <text x={W-30} y={latY(15)+4} fontSize="7" fill="#E06C00" textAnchor="middle" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">Hadley</text>
 
  {/* Title */}
- <text x={W/2} y={16} textAnchor="middle" fontSize="14" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">Global Atmospheric Circulation</text>
- <text x={50} y={H-16} fontSize="10" fill="#666" fontFamily="'Segoe UI',system-ui,sans-serif">← EAST</text>
- <text x={W-50} y={H-16} fontSize="10" fill="#666" textAnchor="end" fontFamily="'Segoe UI',system-ui,sans-serif">WEST →</text>
+ <text x={W/2} y={16} textAnchor="middle" fontSize="12" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">Global Atmospheric Circulation</text>
+ <text x={50} y={H-16} fontSize="8" fill="#666" fontFamily="'Segoe UI',system-ui,sans-serif">← EAST</text>
+ <text x={W-50} y={H-16} fontSize="8" fill="#666" textAnchor="end" fontFamily="'Segoe UI',system-ui,sans-serif">WEST →</text>
  </svg>
  <p style={{textAlign:'center', fontSize:12, color:theme.textMuted, marginTop:4}}>
  🌍 Animated wind particles — showing trade winds, westerlies and polar easterlies
@@ -1974,7 +2254,7 @@ export default function App() {
  <line x1={0} y1={220} x2={W} y2={220} stroke="#8B7355" strokeWidth="2"/>
 
  {/* Direction of movement label */}
- <text x={W/2} y={240} textAnchor="middle" fontSize="10" fill="#555">
+ <text x={W/2} y={240} textAnchor="middle" fontSize="8" fill="#555">
  {isWarm ? '← WARM AIR moving this way (warm front advances)' : '← COLD AIR advancing (cold front undercuts warm)'}
  </text>
 
@@ -1990,19 +2270,19 @@ export default function App() {
  {/* Clouds: Ci, Cs, As, Ns from right to left */}
  {/* Ci - high, thin */}
  <ellipse cx={390} cy={55} rx={55} ry={12} fill="white" stroke="#aaa" strokeWidth="1" opacity="0.9"/>
- <text x={390} y={43} textAnchor="middle" fontSize="10" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ci</text>
+ <text x={390} y={43} textAnchor="middle" fontSize="8" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ci</text>
 
  {/* Cs */}
  <ellipse cx={300} cy={75} rx={50} ry={15} fill="white" stroke="#aaa" strokeWidth="1" opacity="0.9"/>
- <text x={300} y={63} textAnchor="middle" fontSize="10" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cs</text>
+ <text x={300} y={63} textAnchor="middle" fontSize="8" fill="#555" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cs</text>
 
  {/* As */}
  <ellipse cx={200} cy={100} rx={55} ry={20} fill="#B0BEC5" stroke="#777" strokeWidth="1" opacity="0.85"/>
- <text x={200} y={88} textAnchor="middle" fontSize="10" fill="#333" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">As</text>
+ <text x={200} y={88} textAnchor="middle" fontSize="8" fill="#333" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">As</text>
 
  {/* Ns — rain cloud */}
  <ellipse cx={100} cy={135} rx={60} ry={25} fill="#607D8B" stroke="#455A64" strokeWidth="1.5" opacity="0.9"/>
- <text x={100} y={123} textAnchor="middle" fontSize="10" fill="white" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ns</text>
+ <text x={100} y={123} textAnchor="middle" fontSize="8" fill="white" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Ns</text>
 
  {/* Rain */}
  {rainDrops.slice(0,10).map((d,i) => (
@@ -2010,9 +2290,9 @@ export default function App() {
  ))}
 
  {/* Labels */}
- <text x={450} y={200} textAnchor="middle" fontSize="11" fill="#C62828" fontWeight="bold">WARM AIR</text>
- <text x={30} y={200} textAnchor="middle" fontSize="11" fill="#1565C0" fontWeight="bold">COLD AIR</text>
- <text x={250} y={258} textAnchor="middle" fontSize="10" fill="#555">Cloud sequence (right→left): Ci → Cs → As → Ns → steady rain</text>
+ <text x={450} y={200} textAnchor="middle" fontSize="9" fill="#C62828" fontWeight="bold">WARM AIR</text>
+ <text x={30} y={200} textAnchor="middle" fontSize="9" fill="#1565C0" fontWeight="bold">COLD AIR</text>
+ <text x={250} y={258} textAnchor="middle" fontSize="8" fill="#555">Cloud sequence (right→left): Ci → Cs → As → Ns → steady rain</text>
 
  {/* Front symbol on ground */}
  {[120,140,160,180,200].map((x,i) => (
@@ -2032,15 +2312,15 @@ export default function App() {
  <rect x={240} y={60} width="70" height="150" rx="20" fill="#546E7A" opacity="0" />
  <ellipse cx={275} cy={65} rx={45} ry={18} fill="#37474F" stroke="#263238" strokeWidth="1.5" opacity="0.9"/>
  <rect x={252} y={65} width={46} height={120} fill="#455A64" opacity="0.85"/>
- <text x={275} y={55} textAnchor="middle" fontSize="10" fill="white" fontWeight="bold">Cb</text>
+ <text x={275} y={55} textAnchor="middle" fontSize="8" fill="white" fontWeight="bold">Cb</text>
 
  {/* Anvil top */}
  <ellipse cx={275} cy={62} rx={65} ry={14} fill="#90A4AE" opacity="0.7"/>
- <text x={275} y={45} textAnchor="middle" fontSize="9.5" fill="#333" fontStyle="italic" fontFamily="'Segoe UI',system-ui,sans-serif">anvil top</text>
+ <text x={275} y={45} textAnchor="middle" fontSize="7.5" fill="#333" fontStyle="italic" fontFamily="'Segoe UI',system-ui,sans-serif">anvil top</text>
 
  {/* Cu ahead of cold front */}
  <ellipse cx={180} cy={150} rx={35} ry={18} fill="#B0BEC5" stroke="#777" strokeWidth="1" opacity="0.7"/>
- <text x={180} y={140} textAnchor="middle" fontSize="9" fill="#333">Cu</text>
+ <text x={180} y={140} textAnchor="middle" fontSize="7" fill="#333">Cu</text>
 
  {/* Heavy rain */}
  {rainDrops.map((d,i) => (
@@ -2048,9 +2328,9 @@ export default function App() {
  ))}
 
  {/* Labels */}
- <text x={150} y={200} textAnchor="middle" fontSize="11" fill="#C62828" fontWeight="bold">WARM AIR</text>
- <text x={420} y={200} textAnchor="middle" fontSize="11" fill="#1565C0" fontWeight="bold">COLD AIR</text>
- <text x={250} y={258} textAnchor="middle" fontSize="10" fill="#555">Heavy showers, thunderstorms, Cb — then sudden clearing</text>
+ <text x={150} y={200} textAnchor="middle" fontSize="9" fill="#C62828" fontWeight="bold">WARM AIR</text>
+ <text x={420} y={200} textAnchor="middle" fontSize="9" fill="#1565C0" fontWeight="bold">COLD AIR</text>
+ <text x={250} y={258} textAnchor="middle" fontSize="8" fill="#555">Heavy showers, thunderstorms, Cb — then sudden clearing</text>
 
  {/* Front symbols on ground */}
  {[260,278,296,314,332].map((x,i) => (
@@ -2060,7 +2340,7 @@ export default function App() {
  )}
 
  {/* Title */}
- <text x={W/2} y={16} textAnchor="middle" fontSize="13" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">
+ <text x={W/2} y={16} textAnchor="middle" fontSize="11" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif" letterSpacing="0.5">
  {isWarm ? 'WARM FRONT — Cross Section' : 'COLD FRONT — Cross Section'}
  </text>
  </svg>
@@ -2100,13 +2380,13 @@ export default function App() {
  {ticks.map((t,i) => <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke="#888" strokeWidth="1"/>)}
  {cardinals.map((c,i) => {
  const a = i*90*Math.PI/180;
- return <text key={c} x={cx+(r-22)*Math.sin(a)} y={cy-(r-22)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="11" fontWeight="bold" fill="#333">{c}</text>;
+ return <text key={c} x={cx+(r-22)*Math.sin(a)} y={cy-(r-22)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="bold" fill="#333">{c}</text>;
  })}
  <path d={needle(hdg, cx, cy, r-8, color)} stroke={color} strokeWidth={4} strokeLinecap="round"/>
  <path d={needle((hdg+180)%360, cx, cy, r*0.35, color)} stroke={color} strokeWidth={3} strokeLinecap="round" opacity="0.4"/>
  <circle cx={cx} cy={cy} r="5" fill={color}/>
- <text x={cx} y={cy+r+14} textAnchor="middle" fontSize="11" fontWeight="bold" fill={color}>{label}</text>
- <text x={cx} y={cy+r+27} textAnchor="middle" fontSize="13" fontWeight="800" fill={color}>{String(Math.round(((hdg%360)+360)%360)).padStart(3,'0')}°</text>
+ <text x={cx} y={cy+r+14} textAnchor="middle" fontSize="9" fontWeight="bold" fill={color}>{label}</text>
+ <text x={cx} y={cy+r+27} textAnchor="middle" fontSize="11" fontWeight="800" fill={color}>{String(Math.round(((hdg%360)+360)%360)).padStart(3,'0')}°</text>
  </g>
  );
  };
@@ -2134,7 +2414,7 @@ export default function App() {
  {compassRose(250, 110, 85, 'MAGNETIC', magHdg, '#1D9E75')}
  {compassRose(410, 110, 85, 'COMPASS', compHdg, '#E24B4A')}
  <rect x="10" y="205" width="480" height="24" rx="6" fill="#1B4F72" opacity="0.9"/>
- <text x="250" y="221" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">
+ <text x="250" y="221" textAnchor="middle" fontSize="9" fill="white" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">
  T {norm(trueHdg).toString().padStart(3,'0')}° {variation>=0?'+'+variation+'W':variation+'E'} Var → M {norm(magHdg).toString().padStart(3,'0')}° {deviation>=0?'+'+deviation+'W':Math.abs(deviation)+'E'} Dev → C {norm(compHdg).toString().padStart(3,'0')}°
  </text>
  </svg>
@@ -2203,14 +2483,14 @@ export default function App() {
  const p = proj(lat, -90); const p2 = proj(lat, 30);
  return <g key={lat}>
  <line x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="0.5" opacity="0.6"/>
- <text x={35} y={p.y+4} textAnchor="end" fontSize="9" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{lat}°N</text>
+ <text x={35} y={p.y+4} textAnchor="end" fontSize="7" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{lat}°N</text>
  </g>;
  })}
  {lonLines.map(lon => {
  const p = proj(70, lon); const p2 = proj(20, lon);
  return <g key={lon}>
  <line x1={p.x} y1={p.y} x2={p2.x} y2={p2.y} stroke="white" strokeWidth="0.5" opacity="0.6"/>
- <text x={p2.x} y={H-18} textAnchor="middle" fontSize="9" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{Math.abs(lon)}{lon<0?'W':'E'}</text>
+ <text x={p2.x} y={H-18} textAnchor="middle" fontSize="7" fill="#444" fontFamily="'Segoe UI',system-ui,sans-serif">{Math.abs(lon)}{lon<0?'W':'E'}</text>
  </g>;
  })}
  {showRL && <path d={pathD(rlXY)} fill="none" stroke="#1565C0" strokeWidth="2.5" strokeDasharray="8,4"/>}
@@ -2220,13 +2500,13 @@ export default function App() {
  const p = proj(c.lat, c.lon);
  return <g key={c.label}>
  <circle cx={p.x} cy={p.y} r="6" fill="#FBC02D" stroke="#E65100" strokeWidth="1.5"/>
- <text x={p.x} y={p.y-12} textAnchor="middle" fontSize="10" fill="#333" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{c.label}</text>
+ <text x={p.x} y={p.y-12} textAnchor="middle" fontSize="8" fill="#333" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">{c.label}</text>
  </g>;
  })}
- <text x={shipX} y={shipY} textAnchor="middle" dominantBaseline="middle" fontSize="16">🚢</text>
- {showGC && <><rect x={80} y={54} width="340" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={66} textAnchor="middle" fontSize="10" fill="#C62828" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Great Circle ≈ 3,000 nm (curves via higher latitudes)</text></>}
- {showRL && <><rect x={55} y={72} width="390" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={84} textAnchor="middle" fontSize="10" fill="#1565C0" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Rhumb Line ≈ 3,150 nm (straight on Mercator, constant course)</text></>}
- <text x={W/2} y={18} textAnchor="middle" fontSize="13" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">London → New York: Great Circle vs Rhumb Line</text>
+ <text x={shipX} y={shipY} textAnchor="middle" dominantBaseline="middle" fontSize="14">🚢</text>
+ {showGC && <><rect x={80} y={54} width="340" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={66} textAnchor="middle" fontSize="8" fill="#C62828" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Great Circle ≈ 3,000 nm (curves via higher latitudes)</text></>}
+ {showRL && <><rect x={55} y={72} width="390" height="16" rx="3" fill="rgba(255,255,255,0.85)"/><text x={250} y={84} textAnchor="middle" fontSize="8" fill="#1565C0" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">Rhumb Line ≈ 3,150 nm (straight on Mercator, constant course)</text></>}
+ <text x={W/2} y={18} textAnchor="middle" fontSize="11" fill="#1B4F72" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">London → New York: Great Circle vs Rhumb Line</text>
  </svg>
  <p style={{textAlign:'center', fontSize:11, color:theme.textMuted, marginTop:4}}>
  🌍 On a Mercator chart the great circle appears curved. On a gnomonic chart it appears straight. The rhumb line is shorter on the chart but longer in reality.
@@ -2289,7 +2569,7 @@ export default function App() {
  {rings.map((rg,i) => (
  <g key={i}>
  <circle cx={CX} cy={CY} r={rg.r} fill="none" stroke="#00ff0030" strokeWidth="1"/>
- <text x={CX+rg.r+3} y={CY-4} fontSize="10" fill="#00cc00" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">{rg.label}</text>
+ <text x={CX+rg.r+3} y={CY-4} fontSize="8" fill="#00cc00" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">{rg.label}</text>
  </g>
  ))}
  {[0,45,90,135,180,225,270,315].map(a => {
@@ -2298,7 +2578,7 @@ export default function App() {
  })}
  {['N','E','S','W'].map((c,i) => {
  const a = i*90*Math.PI/180;
- return <text key={c} x={CX+(R+12)*Math.sin(a)} y={CY-(R+12)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="#00cc00" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">{c}</text>;
+ return <text key={c} x={CX+(R+12)*Math.sin(a)} y={CY-(R+12)*Math.cos(a)} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#00cc00" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">{c}</text>;
  })}
  {(() => {
  const sweepA = (tick*3 % 360) * Math.PI/180;
@@ -2306,7 +2586,7 @@ export default function App() {
  })()}
  {trail.map((p,i) => <circle key={i} cx={p.x} cy={p.y} r={2+i*0.4} fill="#00ff00" opacity={(i+1)*0.15}/>)}
  <circle cx={px(tgtX)} cy={py(tgtY)} r="5" fill="#00ff00" opacity="0.9"/>
- <text x={px(tgtX)+8} y={py(tgtY)-6} fontSize="9" fill="#00ff00" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">T1</text>
+ <text x={px(tgtX)+8} y={py(tgtY)-6} fontSize="7" fill="#00ff00" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">T1</text>
  {cpa < range && <circle cx={px(cpaX)} cy={py(cpaY)} r="4" fill="none" stroke="#ff4444" strokeWidth="1.5" strokeDasharray="3,2"/>}
  <circle cx={CX} cy={CY} r="5" fill="#ffffff"/>
  <line x1={CX} y1={CY} x2={CX} y2={CY-15} stroke="#ffffff" strokeWidth="2"/>
@@ -4852,100 +5132,229 @@ export default function App() {
 
  function CelestialSphereAnim() {
  const [mode, setMode] = useState('sphere');
- const [t, setT] = useState(0);
+ const [t, setT]       = useState(0);
+ const [season, setSeason] = useState('equinox'); // 'summer'|'equinox'|'winter'
+
  useEffect(() => {
- const id = setInterval(() => setT(x => (x + 1) % 720), 60);
- return () => clearInterval(id);
+   const id = setInterval(() => setT(x => (x + 1) % 720), 55);
+   return () => clearInterval(id);
  }, []);
- const bodyRad = (t * 0.5) * Math.PI / 180;
- const cx = 230, cy = 210, R = 140;
- const bx = cx + R * Math.cos(bodyRad);
- const by = cy - R * 0.32 * Math.sin(bodyRad) - 28;
- const px = cx, py = cy - R;
- const zx = cx - 25, zy = cy - 80;
+
+ // ── Constants ────────────────────────────────────────────────────────
+ const cx = 230, cy = 205, R = 132;
+ const K   = 0.27;                        // vertical foreshortening (equatorial ry/rx)
+ const LAT = 22 * Math.PI / 180;          // observer latitude 22°N (Mumbai / typical DG Shipping)
+ const DEC_DEG = season === 'summer' ? 23.5 : season === 'winter' ? -23.5 : 0;
+ const DEC = DEC_DEG * Math.PI / 180;
+
+ // Hour angle: increases with time → sun drifts WESTWARD (East→West) ✓
+ // H=0 = transit/meridian (due south), H=90°=West, H=−90°=East
+ const H = (t / 720) * 2 * Math.PI;
+
+ // ── Correct projection formula ───────────────────────────────────────
+ // For a point at (declination δ, hour angle H) on the celestial sphere:
+ //   screenX = cx + R·cos(δ)·sin(H)        → East= LEFT (−x), West= RIGHT (+x)
+ //   screenY = cy − R·sin(δ) − R·cos(δ)·cos(H)·K
+ const proj = (dec, ha) => ({
+   x: cx + R * Math.cos(dec) * Math.sin(ha),
+   y: cy - R * Math.sin(dec) - R * Math.cos(dec) * Math.cos(ha) * K,
+ });
+
+ // ── Key points ────────────────────────────────────────────────────────
+ const pole   = proj(Math.PI / 2, 0);             // North Celestial Pole
+ const zenith = proj(LAT, 0);                      // Observer zenith (dec=lat, on meridian)
+ const sun    = proj(DEC, H);                      // Current sun position
+
+ // ── Altitude of sun above observer's horizon ─────────────────────────
+ // sin(alt) = sin(dec)·sin(lat) + cos(dec)·cos(lat)·cos(H)
+ const sinAlt = Math.sin(DEC)*Math.sin(LAT) + Math.cos(DEC)*Math.cos(LAT)*Math.cos(H);
+ const altDeg = Math.round(Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180 / Math.PI);
+ const sunUp  = sinAlt > 0;
+
+ // ── Hour angle at sunrise / sunset ───────────────────────────────────
+ // cos(H_sr) = −tan(lat)·tan(dec)
+ const cosHsr    = -Math.tan(LAT) * Math.tan(DEC);
+ const hasr      = Math.abs(cosHsr) <= 1 ? Math.acos(Math.max(-1, Math.min(1, cosHsr))) : (cosHsr > 1 ? 0 : Math.PI);
+ const polarDay  = cosHsr < -1;  // sun never sets
+ const polarNight= cosHsr > 1;   // sun never rises
+
+ // ── Diurnal path as SVG path strings (above / below horizon) ─────────
+ const N = 180;
+ let aboveD = '', belowD = '';
+ for (let i = 0; i <= N; i++) {
+   const ha = (i / N) * 2 * Math.PI;
+   const p  = proj(DEC, ha);
+   const sa = Math.sin(DEC)*Math.sin(LAT) + Math.cos(DEC)*Math.cos(LAT)*Math.cos(ha);
+   const cmd = i === 0 ? 'M' : 'L';
+   if (sa >= 0) aboveD += `${cmd}${p.x.toFixed(1)},${p.y.toFixed(1)} `;
+   else         belowD += `${cmd}${p.x.toFixed(1)},${p.y.toFixed(1)} `;
+ }
+
+ // ── Horizon curve (parametric, exact for lat 22°N) ───────────────────
+ // Horizon condition: sin(dec)·sin(lat) + cos(dec)·cos(lat)·cos(H) = 0
+ // → tan(dec) = −cot(lat)·cos(H)
+ // Draw only the front arc: H from −π/2 to +π/2 (south-facing hemisphere)
+ let horizD = '';
+ const NH = 80;
+ for (let i = 0; i <= NH; i++) {
+   const ha  = (-Math.PI / 2) + (i / NH) * Math.PI;
+   const dec = Math.atan2(-Math.cos(LAT) * Math.cos(ha), Math.sin(LAT));
+   const p   = proj(dec, ha);
+   horizD += (i === 0 ? 'M' : 'L') + `${p.x.toFixed(1)},${p.y.toFixed(1)} `;
+ }
+
+ // ── Sunrise / sunset screen positions ────────────────────────────────
+ const risePos = proj(DEC, -hasr);  // H negative = east = left ✓
+ const setPos  = proj(DEC,  hasr);  // H positive = west = right ✓
+
+ // ── Equatorial point at same H (for Dec annotation) ──────────────────
+ const eqPt = proj(0, H);
+
  const showTri = mode === 'tri';
  const showDec = mode === 'dec' || showTri;
  const showGHA = mode === 'gha' || showTri;
  const showAlt = mode === 'alt' || showTri;
+
  const infoText = {
- sphere: 'The Celestial Sphere: every star and the Sun are projected onto this imaginary sphere of infinite radius. As Earth rotates, bodies appear to move westward. The sphere has its own coordinate system mirroring Earth\'s geography.',
- dec: 'Declination (Dec): angle N or S of the celestial equator — exactly like latitude. The Sun\'s Dec changes through the year: +23.5°N (June solstice) → 0° (equinoxes) → −23.5°S (December solstice).',
- gha: 'GHA (Greenwich Hour Angle): angle measured westward from Greenwich meridian to the body. Increases with time as Earth rotates (~15°/hour). LHA = GHA − W.Long (or + E.Long). LHA = 0° means the body is on your meridian — local noon for the Sun.',
- alt: 'Altitude (Ho): angle from the observer\'s horizon up to the body, measured by sextant. Zenith Distance = 90° − Ho. The higher the body, the shorter the zenith distance, the closer the GP.',
- tri: 'PZX Triangle — P (elevated Pole), Z (your Zenith), X (the Body). These three points on the celestial sphere form a triangle. Solving it with known LHA and Dec gives Hc (calculated altitude) and Zn (azimuth) for sight reduction.',
+   sphere: `The Celestial Sphere — viewed from outside, south side. Every body projects onto this imaginary sphere. As Earth rotates EASTWARD, the sky appears to rotate WESTWARD: the Sun rises in the East (left), transits the meridian (due south, highest point), then sets in the West (right). Observer at 22°N.`,
+   dec: `Declination (Dec = ${DEC_DEG > 0 ? '+' : ''}${DEC_DEG}°): the Sun's angular distance N or S of the celestial equator — exactly like latitude. It changes slowly through the year: +23.5°N (June solstice) → 0° (equinoxes) → −23.5°S (December solstice). Dec determines the Sun's transit altitude: Hc = 90° − Lat + Dec.`,
+   gha: `GHA (Greenwich Hour Angle): measured WESTWARD from the Greenwich meridian to the Sun's meridian, increasing ~15°/hour. LHA = GHA − W.Long (or + E.Long). When LHA = 0° the Sun is on your meridian — local apparent noon, highest altitude. The green arc on the equatorial plane shows the angular gap.`,
+   alt: `Altitude (Ho): angle from the observer's horizon up to the Sun, measured by sextant. At transit (LHA=0°): Ho = 90° − Lat + Dec. Current altitude: ${sunUp ? altDeg + '°' : 'below horizon'}. Zenith Distance = 90° − Ho. The intercept method compares Ho (observed) with Hc (calculated) to find your position line.`,
+   tri: `PZX Triangle — P (North Pole), Z (your Zenith), X (the Sun). Side PZ = 90°−Lat (co-latitude). Side PX = 90°−Dec (polar distance). Side ZX = 90°−Ho (zenith distance). Angle at P = LHA. Angle at Z = Azimuth (Zn). Solving this spherical triangle gives Hc and Zn for sight reduction.`,
  };
+
  const starPos = [17,43,71,89,113,137,157,173,199,211,233,251,277,293,311,337,353,379,397,419,431,23,59,83,101,127,153,179,203,229,253,279,307,331,359];
+
  return (
- <div style={{ background: '#0a1628', borderRadius: 10, padding: 10, fontFamily: 'Arial,sans-serif', color: '#fff' }}>
- <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: '#7EC8E3', marginBottom: 6 }}>🌐 Interactive Celestial Sphere</div>
- <svg viewBox="0 0 460 380" style={{ width: '100%', display: 'block' }}>
- <rect width="460" height="380" fill="#0a1628" />
- {starPos.map((n, i) => (
- <circle key={i} cx={n % 458} cy={(n * 7 + 13) % 375} r={i % 5 === 0 ? 1.5 : 0.8} fill="white" fillOpacity={0.15 + (i % 7) * 0.06} />
- ))}
- <circle cx={cx} cy={cy} r={R} fill="rgba(20,50,100,0.3)" stroke="#2A4A7F" strokeWidth="1.5" strokeDasharray="8,5" />
- <line x1={cx} y1={cy - R - 8} x2={cx} y2={cy + R + 8} stroke="#E74C3C" strokeWidth="1" strokeDasharray="4,3" opacity="0.4" />
- <ellipse cx={cx} cy={cy} rx={R} ry={R * 0.27} fill="none" stroke="#4A6FA5" strokeWidth="1.5" strokeDasharray="6,4" />
- <text x={cx + R + 3} y={cy + 4} fontSize="9.5" fill="#4A6FA5">Equator</text>
- <ellipse cx={zx} cy={zy + 72} rx={R * 0.68} ry={R * 0.16} fill="none" stroke="#2ECC71" strokeWidth="1.5" strokeDasharray="5,3" />
- <text x={zx + R * 0.68 + 3} y={zy + 76} fontSize="9.5" fill="#2ECC71">Horizon</text>
- {showDec && (
- <>
- <line x1={bx} y1={by} x2={bx} y2={cy} stroke="#2ECC71" strokeWidth="2" strokeDasharray="4,3" />
- <text x={bx + 6} y={(by + cy) / 2 + 4} fontSize="10" fill="#2ECC71" fontWeight="bold">Dec↕</text>
- </>
- )}
- {showGHA && (
- <>
- <line x1={cx} y1={cy} x2={bx} y2={cy} stroke="#F39C12" strokeWidth="2" strokeDasharray="5,3" />
- <text x={(cx + bx) / 2} y={cy + 16} fontSize="10" fill="#F39C12" fontWeight="bold">GHA→</text>
- </>
- )}
- {showAlt && (
- <>
- <line x1={zx} y1={zy} x2={bx} y2={by} stroke="#E74C3C" strokeWidth="2.5" />
- <text x={(zx + bx) / 2 - 20} y={(zy + by) / 2 - 4} fontSize="10" fill="#E74C3C" fontWeight="bold">Ho (Alt)</text>
- </>
- )}
- {showTri && (
- <>
- <line x1={px} y1={py} x2={zx} y2={zy} stroke="#E67E22" strokeWidth="2.5" />
- <line x1={zx} y1={zy} x2={bx} y2={by} stroke="#E74C3C" strokeWidth="2.5" />
- <line x1={px} y1={py} x2={bx} y2={by} stroke="#2ECC71" strokeWidth="2.5" />
- <rect x={(px + zx) / 2 - 50} y={(py + zy) / 2 - 8} width="80" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
- <text x={(px + zx) / 2 - 10} y={(py + zy) / 2 + 4} textAnchor="middle" fontSize="9.5" fill="#E67E22" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">PZ=90°−Lat</text>
- <rect x={(zx + bx) / 2 + 4} y={(zy + by) / 2 - 12} width="76" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
- <text x={(zx + bx) / 2 + 42} y={(zy + by) / 2} textAnchor="middle" fontSize="9.5" fill="#E74C3C" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">ZX=90°−Ho</text>
- <rect x={(px + bx) / 2 + 2} y={(py + by) / 2 - 16} width="80" height="16" rx="3" fill="rgba(10,20,40,0.85)"/>
- <text x={(px + bx) / 2 + 42} y={(py + by) / 2 - 4} textAnchor="middle" fontSize="9.5" fill="#2ECC71" fontWeight="bold" fontFamily="'Segoe UI',system-ui,sans-serif">PX=90°−Dec</text>
- <text x={px + 8} y={py + 20} fontSize="10" fill="#F4D03F" fontWeight="bold">∠P=LHA</text>
- <text x={zx - 58} y={zy + 20} fontSize="10" fill="#F4D03F" fontWeight="bold">∠Z=Az</text>
- </>
- )}
- <circle cx={px} cy={py} r="7" fill="#E74C3C" />
- <text x={px + 10} y={py + 5} fontSize="13" fontWeight="bold" fill="#E74C3C" fontFamily="'Segoe UI',system-ui,sans-serif">P</text>
- <text x={px - 6} y={py - 12} fontSize="9.5" fill="#E74C3C" fontFamily="'Segoe UI',system-ui,sans-serif">N.Pole</text>
- <circle cx={zx} cy={zy} r="7" fill="#F39C12" />
- <text x={zx + 10} y={zy + 5} fontSize="13" fontWeight="bold" fill="#F39C12" fontFamily="'Segoe UI',system-ui,sans-serif">Z</text>
- <text x={zx - 42} y={zy - 12} fontSize="9.5" fill="#F39C12" fontFamily="'Segoe UI',system-ui,sans-serif">Zenith</text>
- <text x={zx - 6} y={zy + 80} fontSize="13" textAnchor="middle" fill="#7EC8E3">⛵</text>
- <circle cx={bx} cy={by} r="13" fill="#F4D03F" stroke="#F39C12" strokeWidth="2.5" />
- <circle cx={bx - 3} cy={by - 3} r="4" fill="rgba(255,255,255,0.5)" />
- <text x={bx + 17} y={by + 4} fontSize="13" fontWeight="bold" fill="#F4D03F" fontFamily="'Segoe UI',system-ui,sans-serif">X</text>
- <text x={bx + 17} y={by + 18} fontSize="9.5" fill="#F4D03F" fontFamily="'Segoe UI',system-ui,sans-serif">Sun</text>
- <text x="230" y="20" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#7EC8E3">The Celestial Sphere</text>
- </svg>
- <div style={{ background: 'rgba(74,111,165,0.2)', border: '1px solid #2A4A7F', borderRadius: 6, padding: '7px 10px', fontSize: 11, color: '#b8d4f0', lineHeight: 1.5, marginTop: 4, minHeight: 44 }}>
- {infoText[mode]}
- </div>
- <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 }}>
- {[['sphere', 'The Sphere', '#7EC8E3'], ['dec', 'Declination', '#2ECC71'], ['gha', 'Hour Angle', '#F39C12'], ['alt', 'Altitude', '#E74C3C'], ['tri', 'PZX Triangle', '#A569BD']].map(([k, l, c]) => (
- <button key={k} onClick={() => setMode(k)}
- style={{ background: mode === k ? c : '#1e3050', color: mode === k ? '#fff' : '#7a9abc', border: `1.5px solid ${mode === k ? c : '#334a66'}`, borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: mode === k ? 700 : 400 }}>
- {l}
- </button>
- ))}
- </div>
+ <div style={{ background: '#080f1e', borderRadius: 10, padding: 10, fontFamily: 'Arial,sans-serif', color: '#fff' }}>
+   <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: '#7EC8E3', marginBottom: 6 }}>🌐 Interactive Celestial Sphere — Observer 22°N</div>
+
+   {/* Season selector */}
+   <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 6 }}>
+     {[['winter','❄️ Winter  Dec −23.5°'], ['equinox','🌱 Equinox  Dec 0°'], ['summer','☀️ Summer  Dec +23.5°']].map(([v, label]) => (
+       <button key={v} onClick={() => setSeason(v)}
+         style={{ background: season === v ? '#0e3a5a' : '#0a1e30', color: season === v ? '#7EC8E3' : '#3a6a8a', border: `1.5px solid ${season===v?'#7EC8E3':'#1a3a55'}`, borderRadius: 5, padding: '3px 10px', cursor: 'pointer', fontSize: 10, fontWeight: season===v ? 700 : 400 }}>
+         {label}
+       </button>
+     ))}
+   </div>
+
+   <svg viewBox="0 0 460 390" style={{ width: '100%', display: 'block' }}>
+     <rect width="460" height="390" fill="#080f1e" />
+
+     {/* Star field */}
+     {starPos.map((n, i) => (
+       <circle key={i} cx={n % 456} cy={(n*7+13)%380} r={i%5===0?1.5:0.8} fill="white" fillOpacity={0.13+(i%7)*0.06} />
+     ))}
+
+     {/* Sphere outline */}
+     <circle cx={cx} cy={cy} r={R} fill="rgba(10,30,70,0.35)" stroke="#1e3a6a" strokeWidth="1.5" strokeDasharray="7,5" />
+
+     {/* Polar axis */}
+     <line x1={cx} y1={cy-R-10} x2={cx} y2={cy+R+10} stroke="#c0392b" strokeWidth="1" strokeDasharray="3,4" opacity="0.35" />
+
+     {/* Celestial equator */}
+     <ellipse cx={cx} cy={cy} rx={R} ry={R*K} fill="none" stroke="#3a5a9a" strokeWidth="1.5" strokeDasharray="6,4" />
+     <text x={cx+R+3} y={cy+4} fontSize="7" fill="#5a7aba">Celestial Equator</text>
+     {/* E / W labels on equator */}
+     <text x={cx-R-18} y={cy+4} fontSize="7" fontWeight="bold" fill="#2ECC71">E</text>
+     <text x={cx+R+3}  y={cy+14} fontSize="7" fontWeight="bold" fill="#2ECC71">W</text>
+
+     {/* Horizon curve (exact parametric for lat 22°N) */}
+     <path d={horizD} fill="none" stroke="#2ECC71" strokeWidth="1.5" strokeDasharray="5,3" opacity="0.85" />
+     <text x={cx-R*0.7-30} y={cy+R*K*2.2+4} fontSize="7" fill="#2ECC71">Horizon</text>
+
+     {/* Sun's diurnal path — below horizon (faint dashed) */}
+     {belowD && <path d={belowD} fill="none" stroke="#b8900a" strokeWidth="1.5" strokeDasharray="4,5" opacity="0.28" />}
+     {/* Sun's diurnal path — above horizon (golden solid) */}
+     {aboveD && <path d={aboveD} fill="none" stroke="#F4D03F" strokeWidth="2" opacity="0.65" />}
+
+     {/* Sunrise / sunset dots */}
+     {!polarDay && !polarNight && <>
+       <circle cx={risePos.x} cy={risePos.y} r="5" fill="none" stroke="#F4D03F" strokeWidth="1.5" opacity="0.7" />
+       <text x={risePos.x-22} y={risePos.y-7} fontSize="6" fill="#F4D03F" opacity="0.8">Rise</text>
+       <circle cx={setPos.x}  cy={setPos.y}  r="5" fill="none" stroke="#F4D03F" strokeWidth="1.5" opacity="0.7" />
+       <text x={setPos.x+4}  y={setPos.y-7} fontSize="6" fill="#F4D03F" opacity="0.8">Set</text>
+     </>}
+
+     {/* ── Mode overlays ─────────────────────────────────────────────── */}
+
+     {/* Declination: vertical line from sun down to the equatorial point at same H */}
+     {showDec && <>
+       <line x1={sun.x} y1={sun.y} x2={eqPt.x} y2={eqPt.y} stroke="#2ECC71" strokeWidth="2" strokeDasharray="4,3" />
+       <rect x={Math.min(sun.x,eqPt.x)+4} y={(sun.y+eqPt.y)/2-9} width={60} height={16} rx={3} fill="rgba(0,12,30,0.8)" />
+       <text x={Math.min(sun.x,eqPt.x)+34} y={(sun.y+eqPt.y)/2+3} textAnchor="middle" fontSize="8" fill="#2ECC71" fontWeight="bold">Dec {DEC_DEG>0?'+':''}{DEC_DEG}°</text>
+     </>}
+
+     {/* GHA: arc on equatorial plane from transit ref (cx, cy-R*K) to current position */}
+     {showGHA && <>
+       <line x1={cx} y1={cy-R*K} x2={eqPt.x} y2={eqPt.y} stroke="#F39C12" strokeWidth="2" strokeDasharray="5,3" />
+       <text x={(cx+eqPt.x)/2+4} y={(cy-R*K+eqPt.y)/2+12} fontSize="8" fill="#F39C12" fontWeight="bold">LHA→</text>
+     </>}
+
+     {/* Altitude: line from zenith to sun */}
+     {showAlt && <>
+       <line x1={zenith.x} y1={zenith.y} x2={sun.x} y2={sun.y} stroke="#E74C3C" strokeWidth="2.5" />
+       <text x={(zenith.x+sun.x)/2-28} y={(zenith.y+sun.y)/2-5} fontSize="8" fill="#E74C3C" fontWeight="bold">{sunUp ? `Ho ${altDeg}°` : 'below'}</text>
+     </>}
+
+     {/* PZX Triangle */}
+     {showTri && <>
+       <line x1={pole.x}   y1={pole.y}   x2={zenith.x} y2={zenith.y} stroke="#E67E22" strokeWidth="2.5" />
+       <line x1={zenith.x} y1={zenith.y} x2={sun.x}    y2={sun.y}    stroke="#E74C3C" strokeWidth="2.5" />
+       <line x1={pole.x}   y1={pole.y}   x2={sun.x}    y2={sun.y}    stroke="#2ECC71" strokeWidth="2.5" />
+       <rect x={(pole.x+zenith.x)/2-50} y={(pole.y+zenith.y)/2-8} width={88} height={16} rx={3} fill="rgba(5,15,35,0.88)" />
+       <text x={(pole.x+zenith.x)/2-6} y={(pole.y+zenith.y)/2+4} textAnchor="middle" fontSize="7.5" fill="#E67E22" fontWeight="bold">PZ = 90°−Lat</text>
+       <rect x={(zenith.x+sun.x)/2+2} y={(zenith.y+sun.y)/2-9} width={88} height={16} rx={3} fill="rgba(5,15,35,0.88)" />
+       <text x={(zenith.x+sun.x)/2+46} y={(zenith.y+sun.y)/2+3} textAnchor="middle" fontSize="7.5" fill="#E74C3C" fontWeight="bold">ZX = 90°−Ho</text>
+       <rect x={(pole.x+sun.x)/2+2} y={(pole.y+sun.y)/2-18} width={88} height={16} rx={3} fill="rgba(5,15,35,0.88)" />
+       <text x={(pole.x+sun.x)/2+46} y={(pole.y+sun.y)/2-6} textAnchor="middle" fontSize="7.5" fill="#2ECC71" fontWeight="bold">PX = 90°−Dec</text>
+       <text x={pole.x+9}   y={pole.y+22}   fontSize="8" fill="#F4D03F" fontWeight="bold">∠P=LHA</text>
+       <text x={zenith.x-62} y={zenith.y+22} fontSize="8" fill="#F4D03F" fontWeight="bold">∠Z=Az</text>
+     </>}
+
+     {/* ── Fixed points ──────────────────────────────────────────────── */}
+
+     {/* North Celestial Pole */}
+     <circle cx={pole.x} cy={pole.y} r="7" fill="#c0392b" />
+     <text x={pole.x+10} y={pole.y+5}  fontSize="11" fontWeight="bold" fill="#E74C3C">P</text>
+     <text x={pole.x-6}  y={pole.y-12} fontSize="7"  fill="#E74C3C">N.Pole</text>
+
+     {/* Zenith (on meridian at observer's latitude — correct position) */}
+     <circle cx={zenith.x} cy={zenith.y} r="7" fill="#E67E22" />
+     <text x={zenith.x+10} y={zenith.y+5}  fontSize="11" fontWeight="bold" fill="#F39C12">Z</text>
+     <text x={zenith.x-40} y={zenith.y-12} fontSize="7"  fill="#F39C12">Zenith (22°N)</text>
+     {/* Ship icon below zenith */}
+     <text x={zenith.x} y={zenith.y+68} fontSize="12" textAnchor="middle" fill="#7EC8E3">⛵</text>
+
+     {/* Sun (X) */}
+     <circle cx={sun.x} cy={sun.y} r="13"
+       fill={sunUp ? "#F4D03F" : "#5a4800"}
+       stroke={sunUp ? "#F39C12" : "#7a6010"} strokeWidth="2.5"
+       opacity={sunUp ? 1 : 0.55} />
+     {sunUp && <circle cx={sun.x-3} cy={sun.y-3} r="4" fill="rgba(255,255,255,0.45)" />}
+     <text x={sun.x+17} y={sun.y+4}  fontSize="11" fontWeight="bold" fill="#F4D03F">X</text>
+     <text x={sun.x+17} y={sun.y+17} fontSize="7"  fill="#F4D03F">☀ {sunUp ? `Alt ${altDeg}°` : 'night'}</text>
+
+     {/* Status bar */}
+     <rect x="4" y="374" width="452" height="14" rx="3" fill="rgba(10,20,50,0.7)" />
+     <text x="230" y="384" textAnchor="middle" fontSize="7" fill="#6a9aba">
+       {`Observer 22°N · Dec ${DEC_DEG>0?'+':''}${DEC_DEG}° · ${sunUp?`Altitude ${altDeg}° · Daytime ☀`:'Sun below horizon · Night 🌙'}${polarDay?' (Midnight Sun)':polarNight?' (Polar Night)':''}`}
+     </text>
+   </svg>
+
+   <div style={{ background:'rgba(14,35,70,0.6)', border:'1px solid #1e3a6a', borderRadius:6, padding:'8px 10px', fontSize:11, color:'#b8d4f0', lineHeight:1.55, marginTop:4, minHeight:46 }}>
+     {infoText[mode]}
+   </div>
+
+   <div style={{ display:'flex', gap:5, flexWrap:'wrap', justifyContent:'center', marginTop:8 }}>
+     {[['sphere','The Sphere','#7EC8E3'],['dec','Declination','#2ECC71'],['gha','Hour Angle','#F39C12'],['alt','Altitude','#E74C3C'],['tri','PZX Triangle','#A569BD']].map(([k,l,c]) => (
+       <button key={k} onClick={() => setMode(k)}
+         style={{ background:mode===k?c:'#0e2040', color:mode===k?'#fff':'#5a8aaa', border:`1.5px solid ${mode===k?c:'#1e3a55'}`, borderRadius:6, padding:'5px 10px', cursor:'pointer', fontSize:11, fontWeight:mode===k?700:400 }}>
+         {l}
+       </button>
+     ))}
+   </div>
  </div>
  );
  }
@@ -4975,27 +5384,27 @@ export default function App() {
  ))}
  <circle cx={cx} cy={cy} r={R} fill="rgba(20,50,100,0.3)" stroke="#2A4A7F" strokeWidth="1.5" strokeDasharray="7,5" />
  <ellipse cx={cx} cy={cy} rx={R} ry={R * 0.27} fill="none" stroke="#4A6FA5" strokeWidth="1.5" strokeDasharray="6,4" />
- <text x={cx + R + 3} y={cy + 4} fontSize="10" fill="#4A6FA5">Celestial Equator</text>
+ <text x={cx + R + 3} y={cy + 4} fontSize="8" fill="#4A6FA5">Celestial Equator</text>
  {step >= 1 && (
  <>
  <circle cx={px} cy={py} r="8" fill="#E74C3C" />
- <text x={px + 11} y={py + 5} fontSize="16" fontWeight="bold" fill="#E74C3C">P</text>
- <text x={px - 12} y={py - 12} fontSize="9" fill="#E74C3C">N.Celestial Pole</text>
+ <text x={px + 11} y={py + 5} fontSize="14" fontWeight="bold" fill="#E74C3C">P</text>
+ <text x={px - 12} y={py - 12} fontSize="7" fill="#E74C3C">N.Celestial Pole</text>
  </>
  )}
  {step >= 2 && (
  <>
  <circle cx={zx} cy={zy} r="8" fill="#F39C12" />
- <text x={zx + 11} y={zy + 5} fontSize="16" fontWeight="bold" fill="#F39C12">Z</text>
- <text x={zx - 46} y={zy - 12} fontSize="9" fill="#F39C12">Zenith (Lat ~35°N)</text>
- <text x={zx - 8} y={zy + 22} fontSize="9.5" fill="#F39C12" fontWeight="bold">PZ = 90°−Lat</text>
+ <text x={zx + 11} y={zy + 5} fontSize="14" fontWeight="bold" fill="#F39C12">Z</text>
+ <text x={zx - 46} y={zy - 12} fontSize="7" fill="#F39C12">Zenith (Lat ~35°N)</text>
+ <text x={zx - 8} y={zy + 22} fontSize="7.5" fill="#F39C12" fontWeight="bold">PZ = 90°−Lat</text>
  </>
  )}
  {step >= 3 && (
  <>
  <circle cx={bx} cy={by} r="13" fill="#F4D03F" stroke="#F39C12" strokeWidth="2.5" />
- <text x={bx + 17} y={by + 5} fontSize="16" fontWeight="bold" fill="#F4D03F">X</text>
- <text x={bx + 17} y={by + 20} fontSize="9" fill="#F4D03F">Sun (Dec ~20°N)</text>
+ <text x={bx + 17} y={by + 5} fontSize="14" fontWeight="bold" fill="#F4D03F">X</text>
+ <text x={bx + 17} y={by + 20} fontSize="7" fill="#F4D03F">Sun (Dec ~20°N)</text>
  </>
  )}
  {step >= 4 && (
@@ -5003,14 +5412,14 @@ export default function App() {
  <line x1={px} y1={py} x2={zx} y2={zy} stroke="#E67E22" strokeWidth="2.5" />
  <line x1={zx} y1={zy} x2={bx} y2={by} stroke="#E74C3C" strokeWidth="2.5" />
  <line x1={px} y1={py} x2={bx} y2={by} stroke="#2ECC71" strokeWidth="2.5" />
- <text x={(px + zx) / 2 - 44} y={(py + zy) / 2 + 4} fontSize="9.5" fill="#E67E22" fontWeight="bold">PZ = 90°−Lat</text>
- <text x={(zx + bx) / 2 + 6} y={(zy + by) / 2 + 4} fontSize="9.5" fill="#E74C3C" fontWeight="bold">ZX = 90°−Ho</text>
- <text x={(px + bx) / 2 + 6} y={(py + by) / 2 - 4} fontSize="9.5" fill="#2ECC71" fontWeight="bold">PX = 90°−Dec</text>
- <text x={px + 8} y={py + 22} fontSize="10" fill="#F4D03F" fontWeight="bold">∠P = LHA</text>
- <text x={zx - 62} y={zy + 22} fontSize="10" fill="#F4D03F" fontWeight="bold">∠Z = Azimuth</text>
+ <text x={(px + zx) / 2 - 44} y={(py + zy) / 2 + 4} fontSize="7.5" fill="#E67E22" fontWeight="bold">PZ = 90°−Lat</text>
+ <text x={(zx + bx) / 2 + 6} y={(zy + by) / 2 + 4} fontSize="7.5" fill="#E74C3C" fontWeight="bold">ZX = 90°−Ho</text>
+ <text x={(px + bx) / 2 + 6} y={(py + by) / 2 - 4} fontSize="7.5" fill="#2ECC71" fontWeight="bold">PX = 90°−Dec</text>
+ <text x={px + 8} y={py + 22} fontSize="8" fill="#F4D03F" fontWeight="bold">∠P = LHA</text>
+ <text x={zx - 62} y={zy + 22} fontSize="8" fill="#F4D03F" fontWeight="bold">∠Z = Azimuth</text>
  <rect x="8" y="335" width="444" height="28" rx="5" fill="rgba(165,105,189,0.2)" stroke="#A569BD" strokeWidth="1" />
- <text x="230" y="350" textAnchor="middle" fontSize="10.5" fill="#E8D5F7" fontWeight="bold">sin Hc = sinLat·sinDec + cosLat·cosDec·cosLHA</text>
- <text x="230" y="363" textAnchor="middle" fontSize="9.5" fill="#B39DD0">Quadrant rule for Zn: if LHA {'<'} 180° → Zn = 360° − Z; if LHA {'>'} 180° → Zn = Z</text>
+ <text x="230" y="350" textAnchor="middle" fontSize="8.5" fill="#E8D5F7" fontWeight="bold">sin Hc = sinLat·sinDec + cosLat·cosDec·cosLHA</text>
+ <text x="230" y="363" textAnchor="middle" fontSize="7.5" fill="#B39DD0">Quadrant rule for Zn: if LHA {'<'} 180° → Zn = 360° − Z; if LHA {'>'} 180° → Zn = Z</text>
  </>
  )}
  </svg>
@@ -5099,34 +5508,34 @@ export default function App() {
  <ellipse cx={earthCX - 15} cy={earthCY - 25} rx={32} ry={25} fill="#2ECC71" fillOpacity="0.35" />
  <ellipse cx={earthCX + 22} cy={earthCY + 18} rx={25} ry={32} fill="#2ECC71" fillOpacity="0.3" />
  <ellipse cx={earthCX - 20} cy={earthCY + 35} rx={38} ry={14} fill="#2ECC71" fillOpacity="0.25" />
- <text x={earthCX} y={earthCY + 5} textAnchor="middle" fontSize="10" fill="#7EC8E3" fontWeight="bold">EARTH</text>
+ <text x={earthCX} y={earthCY + 5} textAnchor="middle" fontSize="8" fill="#7EC8E3" fontWeight="bold">EARTH</text>
  <circle cx={sunX} cy={sunY} r="24" fill="#F4D03F" stroke="#F39C12" strokeWidth="3" />
  <circle cx={sunX - 6} cy={sunY - 6} r="7" fill="rgba(255,255,255,0.45)" />
- <text x={sunX} y={sunY + 4} textAnchor="middle" fontSize="11" fontWeight="bold" fill="#CA6F1E">SUN</text>
+ <text x={sunX} y={sunY + 4} textAnchor="middle" fontSize="9" fontWeight="bold" fill="#CA6F1E">SUN</text>
  {[0, 45, 90, 135, 180, 225, 270, 315].map((a, i) => {
  const r2 = a * Math.PI / 180;
  return <line key={i} x1={sunX + 27 * Math.cos(r2)} y1={sunY + 27 * Math.sin(r2)} x2={sunX + 37 * Math.cos(r2)} y2={sunY + 37 * Math.sin(r2)} stroke="#F4D03F" strokeWidth="2" fillOpacity="0.7" />;
  })}
  <line x1={sunX} y1={sunY + 24} x2={gpX} y2={gpY} stroke="#F4D03F" strokeWidth="1.5" strokeDasharray="4,3" />
  <circle cx={gpX} cy={gpY} r="6" fill="#F4D03F" stroke="#CA6F1E" strokeWidth="2" />
- <text x={gpX + 9} y={gpY - 7} fontSize="10" fill="#F4D03F" fontWeight="bold">GP</text>
- <text x={gpX + 9} y={gpY + 7} fontSize="10" fill="#F4D03F">subsolar point</text>
+ <text x={gpX + 9} y={gpY - 7} fontSize="8" fill="#F4D03F" fontWeight="bold">GP</text>
+ <text x={gpX + 9} y={gpY + 7} fontSize="8" fill="#F4D03F">subsolar point</text>
  {(view === 'altitude' || view === 'circle' || view === 'fix') && (
  <>
  <circle cx={obsX} cy={obsY} r="5" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
- <text x={obsX - 8} y={obsY - 12} fontSize="9" fill="#7EC8E3" fontWeight="bold">Observer ⛵</text>
+ <text x={obsX - 8} y={obsY - 12} fontSize="7" fill="#7EC8E3" fontWeight="bold">Observer ⛵</text>
  <line x1={obsX - 48} y1={obsY + 6} x2={obsX + 48} y2={obsY - 4} stroke="#2ECC71" strokeWidth="1.5" strokeDasharray="4,3" />
- <text x={obsX - 50} y={obsY + 18} fontSize="10" fill="#2ECC71">Horizon</text>
+ <text x={obsX - 50} y={obsY + 18} fontSize="8" fill="#2ECC71">Horizon</text>
  <line x1={obsX} y1={obsY} x2={sunX} y2={sunY} stroke="#E74C3C" strokeWidth="2.5" />
- <text x={(obsX + sunX) / 2 - 18} y={(obsY + sunY) / 2 - 5} fontSize="10" fill="#E74C3C" fontWeight="bold">Ho</text>
- <text x={(obsX + sunX) / 2 - 8} y={(obsY + sunY) / 2 + 8} fontSize="10" fill="#E74C3C">(altitude)</text>
+ <text x={(obsX + sunX) / 2 - 18} y={(obsY + sunY) / 2 - 5} fontSize="8" fill="#E74C3C" fontWeight="bold">Ho</text>
+ <text x={(obsX + sunX) / 2 - 8} y={(obsY + sunY) / 2 + 8} fontSize="8" fill="#E74C3C">(altitude)</text>
  </>
  )}
  {(view === 'circle' || view === 'fix') && (
  <>
  <ellipse cx={gpX} cy={gpY + 2} rx="58" ry="19" fill="none" stroke="#E74C3C" strokeWidth="2.5" strokeDasharray="7,4" />
- <text x={gpX} y={gpY + 30} textAnchor="middle" fontSize="9.5" fill="#E74C3C" fontWeight="bold">Circle of Equal Altitude</text>
- <text x={gpX} y={gpY + 42} textAnchor="middle" fontSize="10" fill="#E74C3C">radius = (90°−Ho)×60 nm</text>
+ <text x={gpX} y={gpY + 30} textAnchor="middle" fontSize="7.5" fill="#E74C3C" fontWeight="bold">Circle of Equal Altitude</text>
+ <text x={gpX} y={gpY + 42} textAnchor="middle" fontSize="8" fill="#E74C3C">radius = (90°−Ho)×60 nm</text>
  <circle cx={gpX + 52} cy={gpY + 7} r="4" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
  <circle cx={gpX - 52} cy={gpY - 3} r="4" fill="#7EC8E3" stroke="#fff" strokeWidth="1.5" />
  </>
@@ -5134,16 +5543,16 @@ export default function App() {
  {view === 'fix' && (
  <>
  <circle cx="100" cy="52" r="18" fill="rgba(155,89,182,0.3)" stroke="#9B59B6" strokeWidth="2.5" />
- <text x="100" y="55" textAnchor="middle" fontSize="9" fill="#D7BDE2" fontWeight="bold">STAR</text>
+ <text x="100" y="55" textAnchor="middle" fontSize="7" fill="#D7BDE2" fontWeight="bold">STAR</text>
  <line x1="100" y1="70" x2={gpX - 20} y2={gpY + 15} stroke="#9B59B6" strokeWidth="1.5" strokeDasharray="4,3" />
  <circle cx={gpX - 22} cy={gpY + 18} r="5" fill="#9B59B6" />
- <text x={gpX - 38} y={gpY + 12} fontSize="10" fill="#9B59B6">GP₂</text>
+ <text x={gpX - 38} y={gpY + 12} fontSize="8" fill="#9B59B6">GP₂</text>
  <ellipse cx={gpX - 20} cy={gpY + 20} rx="50" ry="15" fill="none" stroke="#9B59B6" strokeWidth="2" strokeDasharray="5,4" />
  <circle cx={obsX} cy={obsY} r="9" fill="none" stroke="#F4D03F" strokeWidth="3" />
- <text x={obsX - 22} y={obsY + 22} fontSize="10" fill="#F4D03F" fontWeight="bold">FIX ★</text>
+ <text x={obsX - 22} y={obsY + 22} fontSize="8" fill="#F4D03F" fontWeight="bold">FIX ★</text>
  </>
  )}
- <text x="230" y="20" textAnchor="middle" fontSize="13" fontWeight="bold" fill="#7EC8E3">Geographic Position & Position Lines</text>
+ <text x="230" y="20" textAnchor="middle" fontSize="11" fontWeight="bold" fill="#7EC8E3">Geographic Position & Position Lines</text>
  </svg>
  <div style={{ background: 'rgba(74,111,165,0.2)', border: '1px solid #2A4A7F', borderRadius: 6, padding: '7px 10px', fontSize: 11, color: '#b8d4f0', lineHeight: 1.5, marginTop: 4, minHeight: 50 }}>
  {infoText[view]}
@@ -5541,14 +5950,14 @@ export default function App() {
  if (shape.type === "ball") return (
  <g>
  <circle cx="200" cy="155" r="12" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="180" textAnchor="middle" fontSize="10" fill="#aaa">Black ball forward</text>
+ <text x="200" y="180" textAnchor="middle" fontSize="8" fill="#aaa">Black ball forward</text>
  </g>
  );
  if (shape.type === "balls2") return (
  <g>
  <circle cx="200" cy="148" r="11" fill="#111" stroke="#888" strokeWidth="1.5"/>
  <circle cx="200" cy="172" r="11" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="193" textAnchor="middle" fontSize="10" fill="#aaa">2 black balls (vertical)</text>
+ <text x="200" y="193" textAnchor="middle" fontSize="8" fill="#aaa">2 black balls (vertical)</text>
  </g>
  );
  if (shape.type === "bdb") return (
@@ -5556,7 +5965,7 @@ export default function App() {
  <circle cx="200" cy="145" r="10" fill="#111" stroke="#888" strokeWidth="1.5"/>
  <polygon points="200,158 210,173 200,188 190,173" fill="#111" stroke="#888" strokeWidth="1.5"/>
  <circle cx="200" cy="201" r="10" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="222" textAnchor="middle" fontSize="10" fill="#aaa">Ball–Diamond–Ball</text>
+ <text x="200" y="222" textAnchor="middle" fontSize="8" fill="#aaa">Ball–Diamond–Ball</text>
  </g>
  );
  if (shape.type === "cylinder") return (
@@ -5564,30 +5973,30 @@ export default function App() {
  <rect x="186" y="145" width="28" height="48" rx="3" fill="#111" stroke="#888" strokeWidth="1.5"/>
  <ellipse cx="200" cy="145" rx="14" ry="5" fill="#222" stroke="#888" strokeWidth="1.5"/>
  <ellipse cx="200" cy="193" rx="14" ry="5" fill="#222" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="213" textAnchor="middle" fontSize="10" fill="#aaa">Black cylinder</text>
+ <text x="200" y="213" textAnchor="middle" fontSize="8" fill="#aaa">Black cylinder</text>
  </g>
  );
  if (shape.type === "diamond") return (
  <g>
  <polygon points="200,143 213,162 200,181 187,162" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="200" textAnchor="middle" fontSize="10" fill="#aaa">Diamond (tow &gt;200m)</text>
+ <text x="200" y="200" textAnchor="middle" fontSize="8" fill="#aaa">Diamond (tow &gt;200m)</text>
  </g>
  );
  if (shape.type === "cones") return (
  <g>
  <polygon points="200,144 212,168 188,168" fill="#111" stroke="#888" strokeWidth="1.5"/>
  <polygon points="200,192 212,168 188,168" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="210" textAnchor="middle" fontSize="10" fill="#aaa">2 cones apex-to-apex</text>
+ <text x="200" y="210" textAnchor="middle" fontSize="8" fill="#aaa">2 cones apex-to-apex</text>
  </g>
  );
  if (shape.type === "cone_down") return (
  <g>
  <polygon points="200,168 212,145 188,145" fill="#111" stroke="#888" strokeWidth="1.5"/>
- <text x="200" y="187" textAnchor="middle" fontSize="10" fill="#aaa">Cone apex downward</text>
+ <text x="200" y="187" textAnchor="middle" fontSize="8" fill="#aaa">Cone apex downward</text>
  </g>
  );
  return (
- <text x="200" y="185" textAnchor="middle" fontSize="10" fill="#546e7a">{shape.label}</text>
+ <text x="200" y="185" textAnchor="middle" fontSize="8" fill="#546e7a">{shape.label}</text>
  );
  };
 
@@ -5636,7 +6045,7 @@ export default function App() {
  <circle cx="200" cy="195" r="106" fill="none" stroke="#0d2540" strokeWidth="3" opacity="0.4"/>
  {/* Compass labels */}
  {[["N",200,82],["S",200,316],["E",313,199],["W",88,199]].map(([lbl,x,y]) => (
- <text key={lbl} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#2a4a6a" fontWeight="700">{lbl}</text>
+ <text key={lbl} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#2a4a6a" fontWeight="700">{lbl}</text>
  ))}
 
  {/* Light arcs */}
@@ -5659,14 +6068,14 @@ export default function App() {
  {drawShipSVG(200, 195, 1.0)}
 
  {/* Direction indicator: bow label */}
- <text x="200" y="68" textAnchor="middle" fontSize="9" fill="#546e7a" fontWeight="700">BOW ↑</text>
- <text x="200" y="262" textAnchor="middle" fontSize="9" fill="#546e7a" fontWeight="700">STERN ↓</text>
- <text x="295" y="199" textAnchor="middle" fontSize="9" fill="#1a4a2a" fontWeight="700">STBD →</text>
- <text x="105" y="199" textAnchor="middle" fontSize="9" fill="#4a1a1a" fontWeight="700">← PORT</text>
+ <text x="200" y="68" textAnchor="middle" fontSize="7" fill="#546e7a" fontWeight="700">BOW ↑</text>
+ <text x="200" y="262" textAnchor="middle" fontSize="7" fill="#546e7a" fontWeight="700">STERN ↓</text>
+ <text x="295" y="199" textAnchor="middle" fontSize="7" fill="#1a4a2a" fontWeight="700">STBD →</text>
+ <text x="105" y="199" textAnchor="middle" fontSize="7" fill="#4a1a1a" fontWeight="700">← PORT</text>
 
  {/* Mode label */}
- {showDayShapes && <text x="200" y="16" textAnchor="middle" fontSize="10" fill="#607d8b" fontWeight="700">DAY SHAPES</text>}
- {!showDayShapes && !showArcs && <text x="200" y="16" textAnchor="middle" fontSize="10" fill="#546e7a" fontWeight="600">Lights only (arcs hidden)</text>}
+ {showDayShapes && <text x="200" y="16" textAnchor="middle" fontSize="8" fill="#607d8b" fontWeight="700">DAY SHAPES</text>}
+ {!showDayShapes && !showArcs && <text x="200" y="16" textAnchor="middle" fontSize="8" fill="#546e7a" fontWeight="600">Lights only (arcs hidden)</text>}
  </svg>
 
  {/* Legend table */}
@@ -5778,7 +6187,7 @@ export default function App() {
  <polygon points={hullPts} fill={col} stroke="#fff" strokeWidth="1" opacity="0.95"/>
  <polygon points={supPts} fill="rgba(255,255,255,0.22)" stroke="#fff" strokeWidth="0.8" opacity="0.9"/>
  <circle cx={mast[0].toFixed(1)} cy={mast[1].toFixed(1)} r="2" fill="#fff" opacity="0.8"/>
- <text x={lPos[0].toFixed(1)} y={(lPos[1]-12).toFixed(1)} textAnchor="middle" fontSize="11" fontWeight="800" fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
+ <text x={lPos[0].toFixed(1)} y={(lPos[1]-12).toFixed(1)} textAnchor="middle" fontSize="9" fontWeight="800" fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
  </g>
  );
  };
@@ -5822,9 +6231,9 @@ export default function App() {
  {drawShip(st.shipA.x, st.shipA.y, st.shipA.angle, "#90caf9", "A")}
  {drawShip(st.shipB.x, st.shipB.y, st.shipB.angle, sc.color, "B")}
  {/* Rule label */}
- <text x="230" y="22" textAnchor="middle" fontSize="13" fontWeight="700" fill={sc.color}>{sc.rule}</text>
+ <text x="230" y="22" textAnchor="middle" fontSize="11" fontWeight="700" fill={sc.color}>{sc.rule}</text>
  {/* Step label */}
- <text x="230" y="286" textAnchor="middle" fontSize="10" fill="#90caf9">{st.label}</text>
+ <text x="230" y="286" textAnchor="middle" fontSize="8" fill="#90caf9">{st.label}</text>
  </svg>
  <div style={{ background: "#1a2a3a", borderRadius: 8, padding: "10px 14px", margin: "10px 0", fontSize: 12, color: "#cfd8dc", lineHeight: 1.55, minHeight: 44 }}>
  {st.note}
@@ -10791,10 +11200,10 @@ export default function App() {
  <circle cx={(lPos[0]).toFixed(1)} cy={(lPos[1]-27).toFixed(1)} r="3" fill="#E53935" stroke="#fff" strokeWidth="0.5" />
  </>}
  {/* Label */}
- <text x={lPos[0].toFixed(1)} y={(lPos[1]-12).toFixed(1)} textAnchor="middle" fontSize="11" fontWeight="800" fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
+ <text x={lPos[0].toFixed(1)} y={(lPos[1]-12).toFixed(1)} textAnchor="middle" fontSize="9" fontWeight="800" fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
  {/* Vessel type badge */}
  {vesselType && vesselType !== "PDV" && (
- <text x={lPos[0].toFixed(1)} y={(lPos[1]+14).toFixed(1)} textAnchor="middle" fontSize="9" fontWeight="700" fill="#90caf9" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">{vesselType}</text>
+ <text x={lPos[0].toFixed(1)} y={(lPos[1]+14).toFixed(1)} textAnchor="middle" fontSize="7" fontWeight="700" fill="#90caf9" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">{vesselType}</text>
  )}
  </g>
  );
@@ -10957,8 +11366,8 @@ export default function App() {
  {/* Active ships at current step */}
  {drawShip(tx(st.shipA.x), ty(st.shipA.y), st.shipA.angle, "#90caf9", "O/V", sc.ownType)}
  {drawShip(tx(st.shipB.x), ty(st.shipB.y), st.shipB.angle, catColor, "T/V", sc.targetType)}
- {st.range && <text x="460" y="18" textAnchor="end" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{st.range}</text>}
- <text x="250" y="214" textAnchor="middle" fontSize="9" fill="#90caf9" fontWeight="600">{st.label}</text>
+ {st.range && <text x="460" y="18" textAnchor="end" fontSize="7" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{st.range}</text>}
+ <text x="250" y="214" textAnchor="middle" fontSize="7" fill="#90caf9" fontWeight="600">{st.label}</text>
  </svg>
  );
  })()}
@@ -11064,13 +11473,13 @@ export default function App() {
  {/* Force gauge bar on right */}
  <rect x="430" y="10" width="18" height="180" rx="4" fill="#1a2a3a" />
  <rect x="430" y={10 + 180 - (force / 12) * 180} width="18" height={(force / 12) * 180} rx="4" fill={barColor} />
- <text x="439" y="15" textAnchor="middle" fontSize="9.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F{force}</text>
+ <text x="439" y="15" textAnchor="middle" fontSize="7.5" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F{force}</text>
  {/* Scale ticks */}
  {[0,3,6,9,12].map(f => (
- <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="10" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{f}</text>
+ <text key={f} x="427" y={10 + 180 - (f / 12) * 180 + 4} textAnchor="end" fontSize="8" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{f}</text>
  ))}
  {/* Horizon line label */}
- <text x="15" y="105" fontSize="9" fill="#90caf9" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">sea level</text>
+ <text x="15" y="105" fontSize="7" fill="#90caf9" opacity="0.8" fontFamily="'Segoe UI',system-ui,sans-serif">sea level</text>
  </svg>
  {/* Slider */}
  <div style={{ margin: "12px 0 8px" }}>
@@ -11156,27 +11565,27 @@ export default function App() {
  <rect x="0" y="0" width="560" height="295" fill="url(#csBg)" />
  <rect x="0" y="295" width="560" height="25" fill="#0d3a5e" />
  <line x1="0" y1="295" x2="560" y2="295" stroke="#1e88e5" strokeWidth="1.5" strokeDasharray="10,5" opacity="0.7" />
- <text x="20" y="300" fontSize="9.5" fill="#1e88e5" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">waterline</text>
+ <text x="20" y="300" fontSize="7.5" fill="#1e88e5" opacity="0.9" fontFamily="'Segoe UI',system-ui,sans-serif">waterline</text>
  <path d="M 110,80 L 110,240 Q 112,265 135,278 Q 175,292 280,295 Q 385,292 425,278 Q 448,265 450,240 L 450,80"
  stroke="#607d8b" strokeWidth="3" fill="#0d1f30" />
  <path d="M 148,228 L 162,250 Q 210,262 280,265 Q 350,262 398,250 L 412,228
  Q 430,262 450,275 L 450,295 Q 385,302 280,302 Q 175,302 110,295 L 110,275 Q 130,262 148,228 Z"
  fill="#1a3a55" opacity="0.88" />
- <text x="280" y="260" textAnchor="middle" fontSize="9" fill="#64b5f6" fontWeight="600">DB TANK</text>
+ <text x="280" y="260" textAnchor="middle" fontSize="7" fill="#64b5f6" fontWeight="600">DB TANK</text>
  <path d="M 110,178 L 148,228 L 155,195 Z" fill="#1a4a50" stroke="#26C6DA" strokeWidth="1.5" opacity="0.9" />
  <path d="M 450,178 L 412,228 L 405,195 Z" fill="#1a4a50" stroke="#26C6DA" strokeWidth="1.5" opacity="0.9" />
  <path d="M 110,80 L 110,175 L 155,175 L 155,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
  <path d="M 450,80 L 450,175 L 405,175 L 405,105 Z" fill="#1a3d1a" stroke="#66BB6A" strokeWidth="1.5" opacity="0.9" />
- <text x="127" y="138" textAnchor="middle" fontSize="9" fill="#81C784" transform="rotate(-72,127,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
- <text x="433" y="138" textAnchor="middle" fontSize="9" fill="#81C784" transform="rotate(72,433,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
+ <text x="127" y="138" textAnchor="middle" fontSize="7" fill="#81C784" transform="rotate(-72,127,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
+ <text x="433" y="138" textAnchor="middle" fontSize="7" fill="#81C784" transform="rotate(72,433,138)" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">TOPSIDE</text>
  <rect x="155" y="105" width="250" height="123" fill="#0a1c2c" />
  <line x1="155" y1="195" x2="155" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
  <line x1="405" y1="195" x2="405" y2="228" stroke="#26C6DA" strokeWidth="1.5" opacity="0.6" />
- <text x="280" y="168" textAnchor="middle" fontSize="9" fill="#2a4a6a" fontWeight="700">CARGO HOLD</text>
+ <text x="280" y="168" textAnchor="middle" fontSize="7" fill="#2a4a6a" fontWeight="700">CARGO HOLD</text>
  <rect x="110" y="75" width="340" height="8" fill="#455a64" opacity="0.9" />
  <rect x="195" y="55" width="170" height="22" fill="none" stroke="#00BCD4" strokeWidth="3" />
  <rect x="195" y="55" width="170" height="21" fill="#071220" opacity="0.7" />
- <text x="280" y="70" textAnchor="middle" fontSize="9" fill="#00BCD4" fontWeight="700">HATCH OPENING</text>
+ <text x="280" y="70" textAnchor="middle" fontSize="7" fill="#00BCD4" fontWeight="700">HATCH OPENING</text>
  <rect x="264" y="288" width="32" height="6" fill="#FF8F00" rx="1" />
  <line x1="280" y1="288" x2="280" y2="265" stroke="#FF8F00" strokeWidth="3" />
  <line x1="280" y1="265" x2="280" y2="228" stroke="#FFC107" strokeWidth="2.5" />
@@ -11196,12 +11605,12 @@ export default function App() {
  <line x1="104" y1="252" x2="85" y2="264" stroke="#9CCC65" strokeWidth="3.5" />
  <line x1="456" y1="252" x2="475" y2="264" stroke="#9CCC65" strokeWidth="3.5" />
  <line x1="270" y1="75" x2="290" y2="75" stroke="#FFC107" strokeWidth="2.5" />
- <text x="30" y="310" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">approx 18m beam / 14m depth</text>
+ <text x="30" y="310" fontSize="7" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">approx 18m beam / 14m depth</text>
  {crossMembers.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.82} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="7" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -11224,7 +11633,7 @@ export default function App() {
  <path d="M 0,178 Q 30,175 60,178 Q 90,181 120,178 Q 150,175 180,178 Q 210,181 240,178 Q 270,175 300,178 Q 330,181 360,178 Q 390,175 420,178 Q 450,181 480,178 Q 510,175 540,178 Q 565,181 580,178"
  stroke="#1e88e5" strokeWidth="1" fill="none" opacity="0.35" />
  <line x1="0" y1="175" x2="580" y2="175" stroke="#1e88e5" strokeWidth="1.5" strokeDasharray="10,5" opacity="0.8" />
- <text x="195" y="172" fontSize="9" fill="#1e88e5" opacity="0.9">WATERLINE</text>
+ <text x="195" y="172" fontSize="7" fill="#1e88e5" opacity="0.9">WATERLINE</text>
  <path d="M 28,175 L 28,182 Q 30,192 42,197 Q 82,202 200,202 L 510,202 Q 535,200 548,194 Q 556,186 552,175"
  fill="#7B1A1A" />
  <path d="M 28,175 L 28,182 Q 30,192 42,197 Q 82,202 200,202 L 510,202 Q 535,200 548,194 Q 556,186 552,175"
@@ -11268,15 +11677,15 @@ export default function App() {
  <line x1="448" y1="34" x2="472" y2="34" stroke="#78909C" strokeWidth="1.5" />
  <ellipse cx="460" cy="20" rx="7" ry="3" fill="none" stroke="#90caf9" strokeWidth="1.5" />
  <line x1="100" y1="83" x2="440" y2="81" stroke="#607d8b" strokeWidth="1.5" strokeDasharray="6,3" opacity="0.5" />
- <text x="78" y="22" textAnchor="middle" fontSize="9" fill="#ef9a9a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Bridge/Accomm</text>
- <text x="290" y="73" textAnchor="middle" fontSize="9" fill="#FFB74D" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cargo Holds (5)</text>
- <text x="470" y="57" textAnchor="middle" fontSize="9" fill="#A5D6A7" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F'c'sle</text>
- <text x="540" y="208" fontSize="9" fill="#ef9a9a" fontWeight="600">A/F</text>
+ <text x="78" y="22" textAnchor="middle" fontSize="7" fill="#ef9a9a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Bridge/Accomm</text>
+ <text x="290" y="73" textAnchor="middle" fontSize="7" fill="#FFB74D" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">Cargo Holds (5)</text>
+ <text x="470" y="57" textAnchor="middle" fontSize="7" fill="#A5D6A7" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">F'c'sle</text>
+ <text x="540" y="208" fontSize="7" fill="#ef9a9a" fontWeight="600">A/F</text>
  {profileSpots.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.85} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="7" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -11290,8 +11699,8 @@ export default function App() {
  <rect x="62" y="65" width="85" height="70" fill="#253545" stroke="#546e7a" strokeWidth="2" rx="3" />
  <rect x="57" y="60" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
  <rect x="57" y="128" width="8" height="12" fill="#1e3040" stroke="#546e7a" strokeWidth="1" rx="1" />
- <text x="104" y="101" textAnchor="middle" fontSize="10" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">ACCOMM</text>
- <text x="104" y="116" textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">+ BRIDGE</text>
+ <text x="104" y="101" textAnchor="middle" fontSize="8" fill="#90caf9" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">ACCOMM</text>
+ <text x="104" y="116" textAnchor="middle" fontSize="7" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">+ BRIDGE</text>
  <ellipse cx="84" cy="100" rx="10" ry="12" fill="#37474f" stroke="#607d8b" strokeWidth="1.5" />
  {[155,233,311,389,455].map((x, i) => (
  <g key={"ph"+i}>
@@ -11299,8 +11708,8 @@ export default function App() {
  <rect x={x+2} y="65" width="62" height="33" fill="#253545" stroke="#455a64" strokeWidth="1" rx="1" />
  <rect x={x+2} y="100" width="62" height="35" fill="#253545" stroke="#455a64" strokeWidth="1" rx="1" />
  <line x1={x+2} y1="99" x2={x+64} y2="99" stroke="#37474f" strokeWidth="1" />
- <text x={x+33} y="90" textAnchor="middle" fontSize="9" fill="#546e7a">H{i+1}</text>
- <text x={x+33} y="120" textAnchor="middle" fontSize="9" fill="#546e7a">H{i+1}</text>
+ <text x={x+33} y="90" textAnchor="middle" fontSize="7" fill="#546e7a">H{i+1}</text>
+ <text x={x+33} y="120" textAnchor="middle" fontSize="7" fill="#546e7a">H{i+1}</text>
  </g>
  ))}
  <path d="M 490,55 Q 530,58 548,80 Q 560,90 560,100 Q 560,110 548,120 Q 530,142 490,145 L 490,55 Z"
@@ -11309,7 +11718,7 @@ export default function App() {
  <ellipse cx="541" cy="74" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <ellipse cx="541" cy="126" rx="4" ry="3" fill="#37474f" stroke="#78909C" strokeWidth="1" />
  <circle cx="505" cy="100" r="4" fill="#78909C" stroke="#90a4ae" strokeWidth="1.5" />
- <text x="505" y="116" textAnchor="middle" fontSize="10" fill="#78909C" fontFamily="'Segoe UI',system-ui,sans-serif">MAST</text>
+ <text x="505" y="116" textAnchor="middle" fontSize="8" fill="#78909C" fontFamily="'Segoe UI',system-ui,sans-serif">MAST</text>
  {[72,128].map((y, i) => (
  <rect key={"sb"+i} x="66" y={y} width="6" height="6" fill="#546e7a" rx="1" />
  ))}
@@ -11320,13 +11729,13 @@ export default function App() {
  <line x1="150" y1="137" x2="490" y2="137" stroke="#66BB6A" strokeWidth="1" strokeDasharray="4,3" opacity="0.4" />
  <line x1="150" y1="78" x2="490" y2="78" stroke="#42A5F5" strokeWidth="1" strokeDasharray="5,3" opacity="0.3" />
  <line x1="150" y1="122" x2="490" y2="122" stroke="#42A5F5" strokeWidth="1" strokeDasharray="5,3" opacity="0.3" />
- <text x="540" y="20" textAnchor="end" fontSize="9" fill="#546e7a" fontWeight="600">BOW</text>
- <text x="20" y="20" fontSize="9" fill="#546e7a" fontWeight="600">STERN</text>
+ <text x="540" y="20" textAnchor="end" fontSize="7" fill="#546e7a" fontWeight="600">BOW</text>
+ <text x="20" y="20" fontSize="7" fill="#546e7a" fontWeight="600">STERN</text>
  {planSpots.map((m, idx) => (
  <g key={m.id} onMouseEnter={() => setHovered(m.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "pointer" }}>
  <circle cx={m.cx} cy={m.cy} r={hovered === m.id ? 11 : 7.5} fill={m.color}
  opacity={hovered === m.id ? 1 : 0.85} stroke="#fff" strokeWidth={hovered === m.id ? 2.5 : 1.5} />
- <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="9" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
+ <text x={m.cx} y={m.cy + 4} textAnchor="middle" fontSize="7" fill="#fff" fontWeight="800" pointerEvents="none">{idx + 1}</text>
  </g>
  ))}
  </svg>
@@ -12186,7 +12595,7 @@ export default function App() {
  <polygon points={pts} fill="#90caf9" stroke="#fff" strokeWidth="1.2" opacity="0.95"/>
  <polygon points={supPts} fill="rgba(255,255,255,0.22)" stroke="#fff" strokeWidth="0.8"/>
  <circle cx={cx} cy={cy - L*0.18} r="2" fill="#fff" opacity="0.8"/>
- <text x={cx} y={cy+L*0.65} textAnchor="middle" fontSize="11" fontWeight="800" fill="#90caf9" stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">OWN SHIP</text>
+ <text x={cx} y={cy+L*0.65} textAnchor="middle" fontSize="9" fontWeight="800" fill="#90caf9" stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">OWN SHIP</text>
  </g>
  );
  };
@@ -12202,7 +12611,7 @@ export default function App() {
  {Array.from({length:10},(_,i)=><line key={`h${i}`} x1="0" y1={i*35} x2="480" y2={i*35} stroke="#1a3a5a" strokeWidth="0.5"/>)}
  {Array.from({length:14},(_,i)=><line key={`v${i}`} x1={i*37} y1="0" x2={i*37} y2="320" stroke="#1a3a5a" strokeWidth="0.5"/>)}
  <ellipse cx={cx} cy={cy} rx="200" ry="155" fill="url(#r19-fog)" opacity="0.7"/>
- <text x="240" y="22" textAnchor="middle" fontSize="12" fontWeight="700" fill="#78909c" letterSpacing="4" opacity="0.6">F O G</text>
+ <text x="240" y="22" textAnchor="middle" fontSize="10" fontWeight="700" fill="#78909c" letterSpacing="4" opacity="0.6">F O G</text>
  {st.radarSweep && (
  <g>
  <circle cx={cx} cy={cy} r={radarR} fill="#0a1e0a" stroke="#1b5e20" strokeWidth="1.2" opacity="0.85"/>
@@ -12212,7 +12621,7 @@ export default function App() {
  <line x1={cx} y1={cy-radarR} x2={cx} y2={cy+radarR} stroke="#1b5e20" strokeWidth="0.5" opacity="0.35"/>
  <path d={`M${cx},${cy} L${sweepX.toFixed(1)},${sweepY.toFixed(1)} A${radarR},${radarR} 0 0,1 ${(cx+Math.cos(sweepRad-0.45)*radarR).toFixed(1)},${(cy+Math.sin(sweepRad-0.45)*radarR).toFixed(1)} Z`} fill="#33ff33" opacity="0.15"/>
  <line x1={cx} y1={cy} x2={sweepX.toFixed(1)} y2={sweepY.toFixed(1)} stroke="#33ff33" strokeWidth="1.5" opacity="0.8"/>
- <text x={cx} y={cy-radarR-5} textAnchor="middle" fontSize="9" fill="#4caf50" opacity="0.8">RADAR</text>
+ <text x={cx} y={cy-radarR-5} textAnchor="middle" fontSize="7" fill="#4caf50" opacity="0.8">RADAR</text>
  </g>
  )}
  {st.contactVisible && st.contactPos && (
@@ -12220,29 +12629,29 @@ export default function App() {
  <circle cx={st.contactPos.x} cy={st.contactPos.y} r="6" fill="#ff5722" opacity="0.9"><animate attributeName="r" values="5;9;5" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="0.9;0.4;0.9" dur="1.2s" repeatCount="indefinite"/></circle>
  <circle cx={st.contactPos.x} cy={st.contactPos.y} r="3.5" fill="#ffeb3b" opacity="0.95"/>
  <line x1={cx} y1={cy} x2={st.contactPos.x} y2={st.contactPos.y} stroke="#ff5722" strokeWidth="1" strokeDasharray="4,3" opacity="0.45"/>
- <text x={st.contactPos.x+10} y={st.contactPos.y-8} fontSize="9" fontWeight="700" fill="#ff5722">CONTACT</text>
- <text x={st.contactPos.x+10} y={st.contactPos.y+4} fontSize="9" fill="#ffb300">FWD OF BEAM</text>
+ <text x={st.contactPos.x+10} y={st.contactPos.y-8} fontSize="7" fontWeight="700" fill="#ff5722">CONTACT</text>
+ <text x={st.contactPos.x+10} y={st.contactPos.y+4} fontSize="7" fill="#ffb300">FWD OF BEAM</text>
  </g>
  )}
  <line x1={cx-95} y1={cy} x2={cx+95} y2={cy} stroke="#546e7a" strokeWidth="1" strokeDasharray="3,3" opacity="0.35"/>
- <text x={cx+97} y={cy+4} fontSize="9" fill="#546e7a" opacity="0.55">BEAM</text>
+ <text x={cx+97} y={cy+4} fontSize="7" fill="#546e7a" opacity="0.55">BEAM</text>
  {drawOwnShip()}
  {st.showFogSignal && (
  <g>
  {[0,1,2].map(i=>{ const r=((pulseR+i*26)%80); return <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke="#fff176" strokeWidth={Math.max(0.3,2-r/40)} opacity={Math.max(0,0.7-r/80)}/>; })}
  <rect x={cx-32} y={cy-92} width="64" height="22" rx="5" fill="#1a2a3a" stroke="#fff176" strokeWidth="1.2" opacity="0.9"/>
- <text x={cx} y={cy-76} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff176">1 LONG BLAST</text>
- <text x={cx} y={cy-58} textAnchor="middle" fontSize="9" fill="#90caf9">every 2 minutes (making way)</text>
+ <text x={cx} y={cy-76} textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff176">1 LONG BLAST</text>
+ <text x={cx} y={cy-58} textAnchor="middle" fontSize="7" fill="#90caf9">every 2 minutes (making way)</text>
  <rect x={cx-40} y={cy-48} width="80" height="9" rx="2" fill="#333" opacity="0.8"/>
  <rect x={cx-38} y={cy-47} width="32" height="7" rx="1" fill="#fff176" opacity="0.9"><animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/></rect>
- <text x={cx+5} y={cy-40} textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">4–6s ←→ 2 min gap</text>
+ <text x={cx+5} y={cy-40} textAnchor="middle" fontSize="7" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">4–6s ←→ 2 min gap</text>
  </g>
  )}
  {st.showReduceSpeed && (
  <g>
  <rect x="330" y="28" width="136" height="42" rx="7" fill="#1a2a3a" stroke="#FFA000" strokeWidth="1.5" opacity="0.95"/>
- <text x="398" y="48" textAnchor="middle" fontSize="11" fontWeight="800" fill="#FFA000" fontFamily="'Segoe UI',system-ui,sans-serif">REDUCE SPEED</text>
- <text x="398" y="62" textAnchor="middle" fontSize="9" fill="#ccc" fontFamily="'Segoe UI',system-ui,sans-serif">stop if necessary</text>
+ <text x="398" y="48" textAnchor="middle" fontSize="9" fontWeight="800" fill="#FFA000" fontFamily="'Segoe UI',system-ui,sans-serif">REDUCE SPEED</text>
+ <text x="398" y="62" textAnchor="middle" fontSize="7" fill="#ccc" fontFamily="'Segoe UI',system-ui,sans-serif">stop if necessary</text>
  <rect x="345" y="74" width="116" height="7" rx="2" fill="#333" opacity="0.8"/>
  <rect x="345" y="74" width="42" height="7" rx="2" fill="#FFA000" opacity="0.85"><animate attributeName="width" values="116;42;42" dur="0.8s" fill="freeze"/></rect>
  </g>
@@ -12253,8 +12662,8 @@ export default function App() {
  <circle cx={cx-60} cy={cy-51} r="15" fill="#E53935" opacity="0.15"/>
  <line x1={cx-71} y1={cy-62} x2={cx-49} y2={cy-40} stroke="#E53935" strokeWidth="3" opacity="0.9"/>
  <line x1={cx-49} y1={cy-62} x2={cx-71} y2={cy-40} stroke="#E53935" strokeWidth="3" opacity="0.9"/>
- <text x={cx-95} y={cy-74} fontSize="9.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">DO NOT ALTER</text>
- <text x={cx-90} y={cy-60} fontSize="9.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">TO PORT</text>
+ <text x={cx-95} y={cy-74} fontSize="7.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">DO NOT ALTER</text>
+ <text x={cx-90} y={cy-60} fontSize="7.5" fontWeight="700" fill="#E53935" fontFamily="'Segoe UI',system-ui,sans-serif">TO PORT</text>
  </g>
  )}
  {st.showStbdOk && (
@@ -12262,18 +12671,18 @@ export default function App() {
  <line x1={cx} y1={cy} x2={cx+68} y2={cy-58} stroke="#43A047" strokeWidth="2.5" markerEnd="url(#r19-arr-green)" opacity="0.85"/>
  <circle cx={cx+60} cy={cy-51} r="15" fill="#43A047" opacity="0.15"/>
  <polyline points={`${cx+50},${cy-51} ${cx+58},${cy-42} ${cx+72},${cy-61}`} fill="none" stroke="#43A047" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.95"/>
- <text x={cx+50} y={cy-72} fontSize="9" fontWeight="700" fill="#43A047">ALTER TO STBD</text>
+ <text x={cx+50} y={cy-72} fontSize="7" fontWeight="700" fill="#43A047">ALTER TO STBD</text>
  </g>
  )}
  {st.showStop && (
  <g>
  <rect x="10" y="28" width="106" height="38" rx="7" fill="#1a2a3a" stroke="#E53935" strokeWidth="1.8" opacity="0.95"/>
- <text x="63" y="50" textAnchor="middle" fontSize="12" fontWeight="800" fill="#E53935">ALL STOP</text>
- <text x="63" y="62" textAnchor="middle" fontSize="9" fill="#aaa">Engines astern if needed</text>
+ <text x="63" y="50" textAnchor="middle" fontSize="10" fontWeight="800" fill="#E53935">ALL STOP</text>
+ <text x="63" y="62" textAnchor="middle" fontSize="7" fill="#aaa">Engines astern if needed</text>
  </g>
  )}
  <rect x="0" y="297" width="480" height="23" fill="#0a1628" opacity="0.9"/>
- <text x="240" y="312" textAnchor="middle" fontSize="10" fontWeight="700" fill="#90caf9">{`Step ${step+1}/7 — ${st.title}`}</text>
+ <text x="240" y="312" textAnchor="middle" fontSize="8" fontWeight="700" fill="#90caf9">{`Step ${step+1}/7 — ${st.title}`}</text>
  </svg>
  <div style={{ background: "#1a2a3a", borderRadius: 8, padding: "10px 14px", margin: "10px 0", fontSize: 12, color: "#cfd8dc", lineHeight: 1.55, minHeight: 44 }}>{st.note}</div>
  <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between" }}>
@@ -12345,10 +12754,10 @@ export default function App() {
  {Array.from({length: cycleLen === 60 ? 7 : 13}, (_, i) => {
  const sec = i * (cycleLen / (cycleLen === 60 ? 6 : 12));
  const x = toX(sec);
- return (<g key={i}><line x1={x} y1={TL_Y+BAR_H+8} x2={x} y2={TL_Y+BAR_H+15} stroke="#2a3a4a" strokeWidth="1"/><text x={x} y={TL_Y+BAR_H+26} textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{sec < 60 ? `${sec}s` : `${sec/60}m`}</text></g>);
+ return (<g key={i}><line x1={x} y1={TL_Y+BAR_H+8} x2={x} y2={TL_Y+BAR_H+15} stroke="#2a3a4a" strokeWidth="1"/><text x={x} y={TL_Y+BAR_H+26} textAnchor="middle" fontSize="7" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">{sec < 60 ? `${sec}s` : `${sec/60}m`}</text></g>);
  })}
- <text x={TL_X+TL_W/2} y={TL_Y+BAR_H+40} textAnchor="middle" fontSize="9" fill="#546e7a">— {cycleLen === 60 ? "1 minute cycle (anchor/aground)" : "2 minute cycle (Rule 35)"} —</text>
- <text x={TL_X-4} y={TL_Y+BAR_H/2+4} textAnchor="end" fontSize="9" fill="#546e7a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">SIG</text>
+ <text x={TL_X+TL_W/2} y={TL_Y+BAR_H+40} textAnchor="middle" fontSize="7" fill="#546e7a">— {cycleLen === 60 ? "1 minute cycle (anchor/aground)" : "2 minute cycle (Rule 35)"} —</text>
+ <text x={TL_X-4} y={TL_Y+BAR_H/2+4} textAnchor="end" fontSize="7" fill="#546e7a" fontWeight="600" fontFamily="'Segoe UI',system-ui,sans-serif">SIG</text>
  {v.blasts.map((b, i) => {
  const bx = toX(b.t), bw = toW(b.dur);
  const isActive = i === activeBlastIdx && playing;
@@ -12358,8 +12767,8 @@ export default function App() {
  <rect x={bx} y={TL_Y} width={bw} height={BAR_H} rx="3" fill={col} opacity={isActive ? 1 : 0.72} stroke={isActive ? "#fff" : col} strokeWidth={isActive ? 1.5 : 0.5}/>
  {isActive && <rect x={bx-2} y={TL_Y-2} width={bw+4} height={BAR_H+4} rx="4" fill="none" stroke={col} strokeWidth="2" opacity="0.5"><animate attributeName="opacity" values="0.5;0;0.5" dur="0.6s" repeatCount="indefinite"/></rect>}
  <text x={bx+bw/2} y={TL_Y+BAR_H/2+4} textAnchor="middle" fontSize={bw>22?"9":"8"} fontWeight="700" fill="#fff" opacity="0.92">{b.label}</text>
- <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{b.dur}s</text>
- <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="9" fill={col} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
+ <text x={bx+bw/2} y={TL_Y+BAR_H+7} textAnchor="middle" fontSize="7" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{b.dur}s</text>
+ <text x={bx+bw/2} y={TL_Y-5} textAnchor="middle" fontSize="7" fill={col} opacity="0.85" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="600">{b.type==="long"?"PROLONG":b.type==="bell"?"BELL":"SHORT"}</text>
  </g>
  );
  })}
@@ -12367,19 +12776,19 @@ export default function App() {
  {playing && activeBlastIdx >= 0 && (
  <g>
  {[0,1,2,3].map(i => { const r = ((pulsePhase+i*15)%60); const col = blastColor(v.blasts[activeBlastIdx].type); return <circle key={i} cx="450" cy="72" r={r} fill="none" stroke={col} strokeWidth={Math.max(0.3,2.5-r/24)} opacity={Math.max(0,0.85-r/60)}/>; })}
- <text x="450" y="152" textAnchor="middle" fontSize="9" fill={v.color} fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif">SOUND</text>
- <text x="450" y="163" textAnchor="middle" fontSize="9" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
+ <text x="450" y="152" textAnchor="middle" fontSize="7" fill={v.color} fontWeight="700" fontFamily="'Segoe UI',system-ui,sans-serif">SOUND</text>
+ <text x="450" y="163" textAnchor="middle" fontSize="7" fill="#78909c" fontFamily="'Segoe UI',system-ui,sans-serif">{v.blasts[activeBlastIdx]?.type?.toUpperCase()}</text>
  </g>
  )}
  {(!playing || activeBlastIdx < 0) && (
  <g>
  <circle cx="450" cy="72" r="20" fill="#1a2a3a" stroke="#2a3a4a" strokeWidth="1"/>
- <text x="450" y="76" textAnchor="middle" fontSize="10" fill="#546e7a">—</text>
- <text x="450" y="152" textAnchor="middle" fontSize="9" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">SILENT</text>
+ <text x="450" y="76" textAnchor="middle" fontSize="8" fill="#546e7a">—</text>
+ <text x="450" y="152" textAnchor="middle" fontSize="7" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">SILENT</text>
  </g>
  )}
- {playing && <text x={TL_X+TL_W+5} y={TL_Y+BAR_H/2+4} fontSize="9" fill="#90caf9">{(playhead*cycleLen).toFixed(1)}s</text>}
- <text x="240" y="18" textAnchor="middle" fontSize="11" fontWeight="700" fill={v.color}>{v.name}</text>
+ {playing && <text x={TL_X+TL_W+5} y={TL_Y+BAR_H/2+4} fontSize="7" fill="#90caf9">{(playhead*cycleLen).toFixed(1)}s</text>}
+ <text x="240" y="18" textAnchor="middle" fontSize="9" fontWeight="700" fill={v.color}>{v.name}</text>
  </svg>
  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, justifyContent: "center" }}>
  <button onClick={() => { if (!playing) setPlayhead(0); setPlaying(p => !p); }} style={{ ...btnBase, background: playing ? "#E53935" : "#1b5e20", color: "#fff", padding: "7px 20px", fontSize: 13 }}>{playing ? "Stop" : "Play Signal"}</button>
@@ -12476,7 +12885,7 @@ export default function App() {
  fill="none" stroke="#ffffffaa" strokeWidth="1.3"
  />
  )}
- <text x={cx} y={labelY} textAnchor="middle" fontSize="9" fontWeight="800"
+ <text x={cx} y={labelY} textAnchor="middle" fontSize="7" fontWeight="800"
  fill={col} stroke="#0d1b2a" strokeWidth="3" paintOrder="stroke">{label}</text>
  </g>
  );
@@ -12496,7 +12905,7 @@ export default function App() {
  fill="#0d1b2acc" stroke={borderCol} strokeWidth="1.5" />
  {lines.map((ln, i) => (
  <text key={i} x={cx} y={by + pad + (i + 0.85) * lineH}
- textAnchor="middle" fontSize="11" fontFamily="'Segoe UI',system-ui,sans-serif" fill={borderCol} fontWeight="700">
+ textAnchor="middle" fontSize="9" fontFamily="'Segoe UI',system-ui,sans-serif" fill={borderCol} fontWeight="700">
  {ln}
  </text>
  ))}
@@ -12533,13 +12942,13 @@ export default function App() {
  return (
  <g>
  {/* label boundaries */}
- <text x="95" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>PORT</text>
- <text x="255" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={STBD_COL}>STBD</text>
+ <text x="95" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={PORT_COL}>PORT</text>
+ <text x="255" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={STBD_COL}>STBD</text>
  {/* OWN SHIP near starboard boundary */}
  {drawShip(208, 210, "up", OWN_COL, "OWN SHIP")}
  {/* Arrow pointing to starboard boundary */}
  {drawArrow(220, 210, 238, 210, STBD_COL, "s1a")}
- <text x="258" y="214" fontSize="9" fill={STBD_COL} fontWeight="700">← KEEP HERE</text>
+ <text x="258" y="214" fontSize="7" fill={STBD_COL} fontWeight="700">← KEEP HERE</text>
  {/* Course arrow up */}
  {drawArrow(208, 185, 208, 145, "#ffffffaa", "s1c")}
  </g>
@@ -12550,8 +12959,8 @@ export default function App() {
  // Vessel B (small sail) coming down center; OWN SHIP (PDV) on starboard side
  return (
  <g>
- <text x="95" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>PORT</text>
- <text x="255" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={STBD_COL}>STBD</text>
+ <text x="95" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={PORT_COL}>PORT</text>
+ <text x="255" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={STBD_COL}>STBD</text>
  {/* Vessel B (sailing, small) center of channel going down */}
  {drawShip(168, 130, "down", VBX_COL, "VES B", true)}
  {/* OWN SHIP on starboard side going up */}
@@ -12561,7 +12970,7 @@ export default function App() {
  {drawArrow(210, 195, 210, 155, "#00b4d8aa", "s2b")}
  {/* "Must not impede" label near Vessel B */}
  <rect x="80" y="92" width="118" height="26" rx="4" fill="#1a2a3acc" stroke={VBX_COL} strokeWidth="1" />
- <text x="139" y="108" textAnchor="middle" fontSize="9" fontWeight="700" fill={VBX_COL}>DO NOT IMPEDE PDV</text>
+ <text x="139" y="108" textAnchor="middle" fontSize="7" fontWeight="700" fill={VBX_COL}>DO NOT IMPEDE PDV</text>
  </g>
  );
  }
@@ -12570,8 +12979,8 @@ export default function App() {
  // OWN SHIP behind (below) Vessel B, both going up; OWN sends signal
  return (
  <g>
- <text x="95" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>PORT</text>
- <text x="255" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={STBD_COL}>STBD</text>
+ <text x="95" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={PORT_COL}>PORT</text>
+ <text x="255" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={STBD_COL}>STBD</text>
  {/* Vessel B ahead, going up */}
  {drawShip(185, 130, "up", VBX_COL, "VES B")}
  {/* OWN SHIP behind (lower) */}
@@ -12588,8 +12997,8 @@ export default function App() {
  // Vessel B altered to port, OWN SHIP passing on starboard side
  return (
  <g>
- <text x="95" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>PORT</text>
- <text x="255" y="74" textAnchor="middle" fontSize="9" fontWeight="700" fill={STBD_COL}>STBD</text>
+ <text x="95" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={PORT_COL}>PORT</text>
+ <text x="255" y="74" textAnchor="middle" fontSize="7" fontWeight="700" fill={STBD_COL}>STBD</text>
  {/* Vessel B slightly port side (letting OWN through on stbd) */}
  {drawShip(158, 140, "up", VBX_COL, "VES B")}
  {/* OWN SHIP passing on starboard side */}
@@ -12600,8 +13009,8 @@ export default function App() {
  {drawBubble(158, 112, ["1L+1S+1L+1S", "= AGREED"], STBD_COL)}
  {/* OR danger */}
  <rect x="280" y="150" width="108" height="38" rx="4" fill="#1a2a3acc" stroke={PORT_COL} strokeWidth="1" />
- <text x="334" y="163" textAnchor="middle" fontSize="9" fontWeight="700" fill={PORT_COL}>IF NOT AGREED:</text>
- <text x="334" y="180" textAnchor="middle" fontSize="9" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="700" fill={PORT_COL}>≥ 5 SHORT BLASTS</text>
+ <text x="334" y="163" textAnchor="middle" fontSize="7" fontWeight="700" fill={PORT_COL}>IF NOT AGREED:</text>
+ <text x="334" y="180" textAnchor="middle" fontSize="7" fontFamily="'Segoe UI',system-ui,sans-serif" fontWeight="700" fill={PORT_COL}>≥ 5 SHORT BLASTS</text>
  </g>
  );
  }
@@ -12625,10 +13034,10 @@ export default function App() {
  {drawShip(215, 88, "down", VBX_COL, "? VES")}
  {/* "?" obscured label */}
  <rect x="270" y="82" width="98" height="26" rx="4" fill="#1a2a3acc" stroke="#78909c" strokeWidth="1" />
- <text x="319" y="99" textAnchor="middle" fontSize="9" fill="#b0bec5">OBSCURED BY BEND</text>
+ <text x="319" y="99" textAnchor="middle" fontSize="7" fill="#b0bec5">OBSCURED BY BEND</text>
  {/* answering signal label */}
  <rect x="262" y="120" width="118" height="26" rx="4" fill="#1a2a3acc" stroke={VBX_COL} strokeWidth="1" />
- <text x="321" y="137" textAnchor="middle" fontSize="9" fontWeight="700" fill={VBX_COL}>ANSWERS: 1 PROLONGED</text>
+ <text x="321" y="137" textAnchor="middle" fontSize="7" fontWeight="700" fill={VBX_COL}>ANSWERS: 1 PROLONGED</text>
  </g>
  );
  }
@@ -12671,10 +13080,10 @@ export default function App() {
  <path d={usedStbdPath} fill="none" stroke={STBD_COL} strokeWidth="2.5" opacity="0.9" />
 
  {/* Channel direction label */}
- <text x="178" y="340" textAnchor="middle" fontSize="10" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">↑ Up-channel</text>
+ <text x="178" y="340" textAnchor="middle" fontSize="8" fill="#546e7a" fontFamily="'Segoe UI',system-ui,sans-serif">↑ Up-channel</text>
 
  {/* Step title in SVG */}
- <text x="200" y="22" textAnchor="middle" fontSize="12" fontWeight="800" fill={GOLD}>{st.rule}</text>
+ <text x="200" y="22" textAnchor="middle" fontSize="10" fontWeight="800" fill={GOLD}>{st.rule}</text>
 
  {renderScene()}
  </svg>
@@ -12930,11 +13339,11 @@ export default function App() {
  <line x1="450" y1="63" x2="450" y2="28" stroke="#90a4ae" strokeWidth="2.5" />
  <line x1="439" y1="37" x2="461" y2="37" stroke="#90a4ae" strokeWidth="1.5" />
  {/* Labels */}
- <text x="72" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMMODATION</text>
- <text x="72" y="30" textAnchor="middle" fontSize="9" fill="#263238">+ FUNNEL AFT</text>
- <text x="290" y="72" textAnchor="middle" fontSize="9" fill="#ffd54f" fontWeight="700">HATCH COVERS (5)</text>
- <text x="478" y="59" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="30" y="188" fontSize="9" fill="#ef9a9a">Anti-fouling below waterline</text>
+ <text x="72" y="22" textAnchor="middle" fontSize="7" fill="#263238" fontWeight="700">ACCOMMODATION</text>
+ <text x="72" y="30" textAnchor="middle" fontSize="7" fill="#263238">+ FUNNEL AFT</text>
+ <text x="290" y="72" textAnchor="middle" fontSize="7" fill="#ffd54f" fontWeight="700">HATCH COVERS (5)</text>
+ <text x="478" y="59" textAnchor="middle" fontSize="7" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="30" y="188" fontSize="7" fill="#ef9a9a">Anti-fouling below waterline</text>
  </svg>
  )}
 
@@ -13009,11 +13418,11 @@ export default function App() {
  <line x1="465" y1="71" x2="465" y2="35" stroke="#607d8b" strokeWidth="2.5" />
  <line x1="455" y1="44" x2="475" y2="44" stroke="#607d8b" strokeWidth="1.5" />
  {/* Labels */}
- <text x="68" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMM + BRIDGE AFT</text>
- <text x="284" y="52" textAnchor="middle" fontSize="9" fill="#90caf9">PUMP RM VENT MAST</text>
- <text x="284" y="97" textAnchor="middle" fontSize="10" fill="#ffd54f" fontWeight="700">FULL-LENGTH CATWALK + MANIFOLDS</text>
- <text x="480" y="64" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="520" y="182" fontSize="9" fill="#ef9a9a">A/F</text>
+ <text x="68" y="22" textAnchor="middle" fontSize="7" fill="#263238" fontWeight="700">ACCOMM + BRIDGE AFT</text>
+ <text x="284" y="52" textAnchor="middle" fontSize="7" fill="#90caf9">PUMP RM VENT MAST</text>
+ <text x="284" y="97" textAnchor="middle" fontSize="8" fill="#ffd54f" fontWeight="700">FULL-LENGTH CATWALK + MANIFOLDS</text>
+ <text x="480" y="64" textAnchor="middle" fontSize="7" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="182" fontSize="7" fill="#ef9a9a">A/F</text>
  </svg>
  )}
 
@@ -13086,10 +13495,10 @@ export default function App() {
  <line x1="465" y1="62" x2="465" y2="26" stroke="#607d8b" strokeWidth="2.5" />
  <line x1="455" y1="36" x2="475" y2="36" stroke="#607d8b" strokeWidth="1.5" />
  {/* Labels */}
- <text x="62" y="14" textAnchor="middle" fontSize="9" fill="#cfd8dc" fontWeight="700">TALL BRIDGE TOWER AFT</text>
- <text x="290" y="16" textAnchor="middle" fontSize="10" fill="#ffd54f" fontWeight="700">CONTAINER STACKS (6 bays x 5 tiers)</text>
- <text x="484" y="58" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="520" y="185" fontSize="9" fill="#ef9a9a">A/F</text>
+ <text x="62" y="14" textAnchor="middle" fontSize="7" fill="#cfd8dc" fontWeight="700">TALL BRIDGE TOWER AFT</text>
+ <text x="290" y="16" textAnchor="middle" fontSize="8" fill="#ffd54f" fontWeight="700">CONTAINER STACKS (6 bays x 5 tiers)</text>
+ <text x="484" y="58" textAnchor="middle" fontSize="7" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="185" fontSize="7" fill="#ef9a9a">A/F</text>
  </svg>
  )}
 
@@ -13159,12 +13568,12 @@ export default function App() {
  <path d="M 445,78 L 445,64 L 494,61 Q 510,61 518,65 L 524,78" fill="#eceff1" stroke="#90a4ae" strokeWidth="1.5" />
  <rect x="480" y="57" width="16" height="6" fill="#90a4ae" rx="2" />
  {/* Labels */}
- <text x="68" y="38" textAnchor="middle" fontSize="9" fill="#263238">POOP DECK</text>
- <text x="280" y="32" textAnchor="middle" fontSize="9" fill="#EF5350" fontWeight="700">BRIDGE AMIDSHIPS</text>
- <text x="175" y="33" textAnchor="middle" fontSize="9" fill="#78909C" fontWeight="600">DERRICK MASTS</text>
- <text x="165" y="70" textAnchor="middle" fontSize="9" fill="#ffd54f">Holds 1-2</text>
- <text x="395" y="70" textAnchor="middle" fontSize="9" fill="#ffd54f">Holds 3-4</text>
- <text x="490" y="58" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="68" y="38" textAnchor="middle" fontSize="7" fill="#263238">POOP DECK</text>
+ <text x="280" y="32" textAnchor="middle" fontSize="7" fill="#EF5350" fontWeight="700">BRIDGE AMIDSHIPS</text>
+ <text x="175" y="33" textAnchor="middle" fontSize="7" fill="#78909C" fontWeight="600">DERRICK MASTS</text>
+ <text x="165" y="70" textAnchor="middle" fontSize="7" fill="#ffd54f">Holds 1-2</text>
+ <text x="395" y="70" textAnchor="middle" fontSize="7" fill="#ffd54f">Holds 3-4</text>
+ <text x="490" y="58" textAnchor="middle" fontSize="7" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
  </svg>
  )}
 
@@ -13241,10 +13650,10 @@ export default function App() {
  <line x1="462" y1="67" x2="462" y2="28" stroke="#78909C" strokeWidth="2.5" />
  <line x1="452" y1="36" x2="472" y2="36" stroke="#78909C" strokeWidth="1.5" />
  {/* Labels */}
- <text x="64" y="22" textAnchor="middle" fontSize="9" fill="#263238" fontWeight="700">ACCOMM AFT</text>
- <text x="292" y="15" textAnchor="middle" fontSize="9" fill="#f9a825" fontWeight="700">SPHERICAL MOSS TANKS (4)</text>
- <text x="480" y="62" textAnchor="middle" fontSize="9" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
- <text x="520" y="183" fontSize="9" fill="#90a4ae">A/F</text>
+ <text x="64" y="22" textAnchor="middle" fontSize="7" fill="#263238" fontWeight="700">ACCOMM AFT</text>
+ <text x="292" y="15" textAnchor="middle" fontSize="7" fill="#f9a825" fontWeight="700">SPHERICAL MOSS TANKS (4)</text>
+ <text x="480" y="62" textAnchor="middle" fontSize="7" fill="#a5d6a7" fontWeight="700">F'c'sle</text>
+ <text x="520" y="183" fontSize="7" fill="#90a4ae">A/F</text>
  </svg>
  )}
 
@@ -13297,13 +13706,13 @@ export default function App() {
  <path d="M 20,155 L 20,80 L 14,90 L 14,162 Z" fill="#bdbdbd" stroke="#9e9e9e" strokeWidth="2" />
  <path d="M 14,90 L 20,80" stroke="#757575" strokeWidth="3" />
  {/* Ramp label */}
- <text x="7" y="130" textAnchor="middle" fontSize="9" fill="#EF5350" fontWeight="700" transform="rotate(-90,7,130)">STERN RAMP</text>
+ <text x="7" y="130" textAnchor="middle" fontSize="7" fill="#EF5350" fontWeight="700" transform="rotate(-90,7,130)">STERN RAMP</text>
  {/* Bow — rounded, high */}
  <path d="M 480,52 Q 500,51 516,55 Q 528,60 532,74 Q 535,90 540,120" stroke="#9e9e9e" strokeWidth="2" fill="#e0e0e0" />
  {/* Labels */}
- <text x="292" y="18" textAnchor="middle" fontSize="9" fill="#ffd54f" fontWeight="700">VERY HIGH SIDES — MULTIPLE VEHICLE DECKS</text>
- <text x="292" y="166" textAnchor="middle" fontSize="10" fill="#90a4ae" fontWeight="600">NO VISIBLE DECK CARGO — VEHICLES INSIDE</text>
- <text x="338" y="24" textAnchor="middle" fontSize="9" fill="#78909C">VENTILATION GRILLES</text>
+ <text x="292" y="18" textAnchor="middle" fontSize="7" fill="#ffd54f" fontWeight="700">VERY HIGH SIDES — MULTIPLE VEHICLE DECKS</text>
+ <text x="292" y="166" textAnchor="middle" fontSize="8" fill="#90a4ae" fontWeight="600">NO VISIBLE DECK CARGO — VEHICLES INSIDE</text>
+ <text x="338" y="24" textAnchor="middle" fontSize="7" fill="#78909C">VENTILATION GRILLES</text>
  </svg>
  )}
 
@@ -13702,8 +14111,243 @@ export default function App() {
  );
  };
 
+ // ── ALTITUDE CORRECTION CHAIN ─────────────────────────────────────────────
+ function AltitudeCorrectionChainAnim() {
+  const [bodyType, setBodyType] = useState('sun_ll');
+  const [active, setActive] = useState(null);
+
+  const configs = {
+    sun_ll: {
+      label: "Sun — Lower Limb", icon: "☀️",
+      steps: [
+        { id: 'hs',   label: 'Sextant Altitude (hs)',          abbr: 'hs',   color: '#4A90D9', note: 'The raw reading from the sextant arc before any corrections. Record to nearest 0.1\'.',                                                                                     formula: null,                                              val: '42° 38.4\'' },
+        { id: 'ie',   label: 'Index Error  (± IE)',              abbr: '±IE',  color: '#F39C12', note: 'ON the arc → subtract. OFF the arc → add.\nMnemonic: "If it\'s ON, take it OFF; if it\'s OFF, put it ON."\nTypical range: 0–4\'. Check before every sight session.',  formula: 'IE on arc: subtract | IE off arc: add',          val: '+1.8\' (off)' },
+        { id: 'dip',  label: 'Dip  (− Dip)',                     abbr: '−Dip', color: '#E74C3C', note: 'ALWAYS subtracted. Your elevated eye causes the visible horizon to dip below the true horizon, making the body appear higher than it is.\nHigher bridge → bigger Dip.',  formula: 'Dip ≈ −1.77\' × √(HE metres)  or  −0.97\' × √(HE feet)', val: '−6.1\' (12m)', result: { label: 'Apparent Altitude  ha', val: '42° 34.1\'', highlight: false } },
+        { id: 'refr', label: 'Refraction  (− R)',                 abbr: '−R',   color: '#E74C3C', note: 'Atmosphere bends light making bodies appear HIGHER. Always negative. Very large near the horizon (~34\' at 0°) and negligible near the zenith. Avoid observations below 5°.', formula: 'R ≈ 1.02\' ÷ tan(ha)  (at 42°: ≈ 1.1\')', val: '−1.1\'' },
+        { id: 'sd',   label: 'Semi-Diameter  (+ SD, lower limb)', abbr: '+SD',  color: '#27AE60', note: 'You observe the lower limb (bottom edge). The centre of the Sun is ABOVE — so add SD to reach the centre.\nUpper limb: subtract SD instead.\nSun SD varies: ~15.7\' (June) to 16.4\' (January).', formula: 'Lower limb: +SD | Upper limb: −SD\nSun SD ≈ 15.7\' to 16.4\'', val: '+16.1\'' },
+        { id: 'pa',   label: 'Parallax in Altitude  (+ PA)',       abbr: '+PA',  color: '#7F8C8D', note: 'Corrects from Earth-surface observation to geocentric (Earth-centre) value needed for the PZX triangle. Negligible for Sun (<0.2\'). Critical for Moon (~57\' HP).', formula: 'PA = HP × cos(ha)  [Sun HP ≈ 0.15\']',              val: '+0.1\'', result: { label: 'Observed Altitude  Ho', val: '42° 49.2\'', highlight: true } },
+      ]
+    },
+    sun_ul: {
+      label: "Sun — Upper Limb", icon: "☀️",
+      steps: [
+        { id: 'hs',   label: 'Sextant Altitude (hs)',          abbr: 'hs',   color: '#4A90D9', note: 'Raw sextant reading — upper limb (top edge) of the Sun aligned with the horizon.', formula: null, val: '43° 10.0\'' },
+        { id: 'ie',   label: 'Index Error  (± IE)',              abbr: '±IE',  color: '#F39C12', note: 'ON arc → subtract. OFF arc → add.',                                              formula: null, val: '−2.0\' (on)' },
+        { id: 'dip',  label: 'Dip  (− Dip)',                     abbr: '−Dip', color: '#E74C3C', note: 'Always negative. Height of eye 12 m.',                                           formula: 'Dip ≈ −1.77\' × √(12) ≈ −6.1\'', val: '−6.1\'', result: { label: 'Apparent Altitude  ha', val: '43° 01.9\'', highlight: false } },
+        { id: 'refr', label: 'Refraction  (− R)',                 abbr: '−R',   color: '#E74C3C', note: 'Always negative. Atmosphere makes bodies appear higher than they are.',          formula: 'R ≈ 1.02\' ÷ tan(43°) ≈ 1.1\'', val: '−1.1\'' },
+        { id: 'sd',   label: 'Semi-Diameter  (− SD, upper limb)', abbr: '−SD',  color: '#E74C3C', note: 'You observe the upper limb (top edge). The centre is BELOW — so SUBTRACT SD.\nThis is the key difference from lower limb.', formula: 'Upper limb: −SD | Lower limb: +SD', val: '−16.1\'' },
+        { id: 'pa',   label: 'Parallax  (+ PA)',                  abbr: '+PA',  color: '#7F8C8D', note: 'Negligible for Sun.',                                                             formula: null, val: '+0.1\'', result: { label: 'Observed Altitude  Ho', val: '42° 44.9\'', highlight: true } },
+      ]
+    },
+    star: {
+      label: "Star", icon: "⭐",
+      steps: [
+        { id: 'hs',   label: 'Sextant Altitude (hs)',  abbr: 'hs',   color: '#4A90D9', note: 'Raw sextant reading — star centre (point) aligned with the horizon.',                                                                                                            formula: null, val: '31° 22.0\'' },
+        { id: 'ie',   label: 'Index Error  (± IE)',      abbr: '±IE',  color: '#F39C12', note: 'ON arc → subtract. OFF arc → add.',                                                                                                                                               formula: null, val: '+2.0\' (off)' },
+        { id: 'dip',  label: 'Dip  (− Dip)',             abbr: '−Dip', color: '#E74C3C', note: 'Always negative.',                                                                                                                                                               formula: 'Dip = −1.77\' × √(HE m)', val: '−3.0\'', result: { label: 'Apparent Altitude  ha', val: '31° 21.0\'', highlight: false } },
+        { id: 'refr', label: 'Refraction only  (− R)',   abbr: '−R',   color: '#E74C3C', note: 'For stars: ONLY refraction applies.\n• No semi-diameter — stars are point sources with no visible disc.\n• No parallax — stars are so distant it is completely negligible.\nThe single "star correction" table in the Almanac gives the refraction value directly.', formula: 'R ≈ 1.02\' ÷ tan(31°) ≈ 1.7\'', val: '−1.6\'', result: { label: 'Observed Altitude  Ho', val: '31° 19.4\'', highlight: true } },
+      ]
+    },
+    moon: {
+      label: "Moon — Lower Limb", icon: "🌙",
+      steps: [
+        { id: 'hs',   label: 'Sextant Altitude (hs)',                    abbr: 'hs',    color: '#4A90D9', note: 'Raw sextant reading — lower limb of the Moon on the horizon.',                                                                                                                                                                              formula: null, val: '31° 22.0\'' },
+        { id: 'ie',   label: 'Index Error  (± IE)',                        abbr: '±IE',   color: '#F39C12', note: 'ON arc → subtract. OFF arc → add.',                                                                                                                                                                                                           formula: null, val: '+2.0\' (off)' },
+        { id: 'dip',  label: 'Dip  (− Dip)',                               abbr: '−Dip',  color: '#E74C3C', note: 'Always negative.',                                                                                                                                                                                                                            formula: 'Dip = −1.77\' × √(HE m)', val: '−3.0\'', result: { label: 'Apparent Altitude  ha', val: '31° 21.0\'', highlight: false } },
+        { id: 'refr', label: 'Refraction  (− R)',                          abbr: '−R',    color: '#E74C3C', note: 'Same formula as other bodies. Largest near the horizon.',                                                                                                                                                                                     formula: 'R ≈ 1.02\' ÷ tan(31°) ≈ 1.7\'', val: '−1.6\'' },
+        { id: 'sd',   label: 'Augmented Semi-Diameter  (+ SD*)',           abbr: '+SD*',  color: '#27AE60', note: 'Add for lower limb. Moon SD is NOT fixed — it varies with the Moon\'s distance from Earth (~15\' to ~16.8\'). It must be AUGMENTED — the Moon gets slightly larger in apparent size as its altitude increases, because the observer is closer to it at higher altitude.\nAugmentation = sin(ha) × HP.\nValues from Almanac: "Moon Semi-Diameter" column.', formula: 'SD* = SD_tabulated + augmentation\nTypically: 16.3\' + augmentation ≈ 16.5\'', val: '+16.5\'' },
+        { id: 'pa',   label: 'Parallax in Altitude  (+ PA) — CRITICAL',   abbr: '+PA',   color: '#E74C3C', note: 'The LARGEST single correction for Moon sights — up to 57\'!\nThe Moon is only ~385,000 km away. Observing from the Earth\'s surface vs centre gives a huge difference.\nHP (Horizontal Parallax) = ~57\', tabulated in the Almanac for each hour.\nPA = HP × cos(ha)\nAt ha = 31°: PA = 59\' × cos31° ≈ 50.6\'.', formula: 'HP ≈ 59\' (from Almanac — varies daily)\nPA = HP × cos(ha)   at 31°: ≈ 50.6\'', val: '+51.1\'' },
+        { id: 'lc',   label: 'Latitude Correction for HP  (− ΔP)',        abbr: '−ΔP',   color: '#7F8C8D', note: 'Small correction because the Earth is not a perfect sphere (oblate spheroid). HP is given for the equatorial radius, but the actual Earth radius varies with latitude. Correction = HP × sin²(Lat) ÷ 298.3\nUsually < 0.2\' — often omitted in practice.', formula: 'ΔP = HP × sin²(Lat) ÷ 298.3', val: '−0.1\'', result: { label: 'Observed Altitude  Ho', val: '32° 26.9\'', highlight: true } },
+      ]
+    }
+  };
+
+  const cfg = configs[bodyType];
+  const dm = useRef(false);
+
+  return (
+   <div style={{ background: '#080f1e', borderRadius: 10, padding: 12, fontFamily: 'Arial, sans-serif', color: '#fff', userSelect: 'none' }}>
+    <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: '#7EC8E3', marginBottom: 8 }}>🔭 Altitude Corrections — From Sextant (hs) to Observed Altitude (Ho)</div>
+
+    {/* Body selector */}
+    <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+      {Object.entries(configs).map(([k, c]) => (
+        <button key={k} onClick={() => { setBodyType(k); setActive(null); }}
+          style={{ background: bodyType===k ? '#1a3a5a' : '#0d1e30', border: `1.5px solid ${bodyType===k ? '#7EC8E3' : '#1a3a55'}`, borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 10, color: bodyType===k ? '#7EC8E3' : '#4a6a8a', fontWeight: bodyType===k ? 700 : 400 }}>
+          {c.icon} {c.label}
+        </button>
+      ))}
+    </div>
+
+    {/* Chain */}
+    <div style={{ maxWidth: 480, margin: '0 auto' }}>
+      {cfg.steps.map((step) => (
+        <div key={step.id}>
+          <div onClick={() => setActive(active === step.id ? null : step.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, background: active===step.id ? 'rgba(30,60,120,0.65)' : 'rgba(14,30,60,0.45)', border: `1.5px solid ${active===step.id ? step.color : '#1a3a5a'}`, borderRadius: 7, padding: '7px 10px', cursor: 'pointer', marginBottom: 3, transition: 'background 0.15s, border-color 0.15s' }}>
+            <div style={{ minWidth: 34, height: 22, borderRadius: 4, background: step.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 9, color: '#fff', letterSpacing: 0.5 }}>{step.abbr}</div>
+            <div style={{ flex: 1, fontSize: 11, color: '#c8dff0' }}>{step.label}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 12, color: step.color, fontWeight: 700, minWidth: 58, textAlign: 'right' }}>{step.val}</div>
+            <div style={{ fontSize: 8, color: '#2a4a6a', marginLeft: 2 }}>▶</div>
+          </div>
+          {step.result && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: step.result.highlight ? 'rgba(39,174,96,0.15)' : 'rgba(6,15,35,0.5)', border: `1px solid ${step.result.highlight ? '#27AE60' : '#1a3a5a'}`, borderRadius: 6, padding: '5px 10px', margin: '3px 0 5px 0' }}>
+              <div style={{ fontSize: 10, color: step.result.highlight ? '#2ECC71' : '#7EC8E3', fontWeight: step.result.highlight ? 700 : 400 }}>{step.result.highlight ? '✦ ' : '→ '}{step.result.label}</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12, color: step.result.highlight ? '#2ECC71' : '#7EC8E3', fontWeight: step.result.highlight ? 700 : 500 }}>{step.result.val}</div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+
+    {/* Detail panel */}
+    {active && (() => {
+      const step = cfg.steps.find(s => s.id === active);
+      if (!step) return null;
+      return (
+        <div style={{ marginTop: 8, background: 'rgba(10,20,45,0.85)', border: `1.5px solid ${step.color}`, borderRadius: 8, padding: '10px 13px', fontSize: 11, color: '#c8dff0', lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 700, color: step.color, fontSize: 12, marginBottom: 5 }}>{step.label}</div>
+          <div style={{ whiteSpace: 'pre-line' }}>{step.note}</div>
+          {step.formula && <div style={{ marginTop: 6, fontFamily: 'monospace', fontSize: 10.5, color: '#7EC8E3', background: 'rgba(0,0,0,0.35)', padding: '5px 9px', borderRadius: 5, whiteSpace: 'pre-line' }}>{step.formula}</div>}
+        </div>
+      );
+    })()}
+    {!active && <div style={{ textAlign: 'center', fontSize: 10, color: '#2a4a6a', marginTop: 8 }}>Tap any correction step to see the formula and explanation</div>}
+   </div>
+  );
+ }
+
+ // ── NAUTICAL ALMANAC READER ──────────────────────────────────────────────────
+ function AlmanacReaderAnim() {
+  const [mins, setMins] = useState(22);
+  const [secs, setSecs] = useState(18);
+  const [bodyView, setBodyView] = useState('sun'); // 'sun' | 'star'
+
+  // Representative almanac data — Sun (Dec solstice day)
+  const sunData = { hour: 14, gha_hr: 28.917, v: 0, dec: -23.417, d: -0.003 };
+  // Representative almanac data — Aries + Sirius
+  const ariesData = { hour: 0, gha_hr: 118.045 };
+  const siriusData = { sha: 258.753, dec: -16.717 };
+
+  const totalMins = mins + secs / 60;
+  const gha_inc   = totalMins * 0.25;                    // Sun/Aries: 15°/hr = 0.25'/min
+  const sun_gha   = ((sunData.gha_hr + gha_inc) % 360);
+  const sun_dec   = sunData.dec + sunData.d * totalMins;
+  const aries_gha = ((ariesData.gha_hr + gha_inc) % 360);
+  const sirius_gha = (aries_gha + siriusData.sha) % 360;
+
+  const fmtDMS = (d) => {
+    const abs = Math.abs(d), deg = Math.floor(abs), min = ((abs - deg)*60).toFixed(1);
+    const ns  = d < 0 ? 'S' : 'N';
+    return `${String(deg).padStart(3)}° ${String(min).padStart(4)}' ${ns}`;
+  };
+  const fmtGHA = (d) => {
+    const abs = ((d % 360) + 360) % 360, deg = Math.floor(abs), min = ((abs - deg)*60).toFixed(1);
+    return `${String(deg).padStart(3)}° ${String(min).padStart(4)}'`;
+  };
+
+  return (
+   <div style={{ background: '#080f1e', borderRadius: 10, padding: 12, fontFamily: 'Arial, sans-serif', color: '#fff' }}>
+    <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14, color: '#7EC8E3', marginBottom: 8 }}>📋 Nautical Almanac — Extracting GHA & Declination</div>
+
+    {/* Body selector */}
+    <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
+      {[['sun','☀️ Sun'], ['star','⭐ Star (Sirius)']].map(([k,l]) => (
+        <button key={k} onClick={() => setBodyView(k)} style={{ background: bodyView===k ? '#1a3a5a' : '#0d1e30', border: `1.5px solid ${bodyView===k ? '#7EC8E3' : '#1a3a55'}`, borderRadius: 6, padding: '4px 14px', cursor: 'pointer', fontSize: 11, color: bodyView===k ? '#7EC8E3' : '#4a6a8a', fontWeight: bodyView===k ? 700 : 400 }}>{l}</button>
+      ))}
+    </div>
+
+    {/* Almanac page mockup */}
+    <div style={{ background: '#f5f0de', color: '#111', borderRadius: 6, padding: 10, marginBottom: 10, fontFamily: 'monospace', fontSize: 10 }}>
+      <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 11, marginBottom: 6, color: '#000' }}>
+        {bodyView === 'sun' ? '22 DEC — SUN' : '22 DEC — ARIES  /  SIRIUS (SHA 258° 45.2\'  Dec S 16° 43.0\')'}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: bodyView==='sun' ? '32px 90px 85px' : '32px 90px', gap: '2px 4px' }}>
+        {/* Header */}
+        <div style={{ fontWeight: 700 }}>h</div>
+        <div style={{ fontWeight: 700, textAlign: 'right' }}>GHA {bodyView === 'sun' ? 'Sun' : 'Aries'}</div>
+        {bodyView === 'sun' && <div style={{ fontWeight: 700, textAlign: 'right' }}>Dec</div>}
+        {/* Rows for hours 13, 14, 15 */}
+        {[13,14,15].map(h => {
+          const g = bodyView === 'sun' ? fmtGHA(sunData.gha_hr + (h-sunData.hour)*15) : fmtGHA(ariesData.gha_hr + (h-ariesData.hour)*15);
+          const isActive = h === sunData.hour;
+          const bg = isActive ? '#fffbd0' : 'transparent';
+          return (
+            <React.Fragment key={h}>
+              <div style={{ background: bg, fontWeight: isActive ? 700 : 400 }}>{h}</div>
+              <div style={{ background: bg, textAlign: 'right', fontWeight: isActive ? 700 : 400 }}>{g}</div>
+              {bodyView === 'sun' && <div style={{ background: bg, textAlign: 'right', fontWeight: isActive ? 700 : 400 }}>{fmtDMS(sunData.dec + (h-sunData.hour)*sunData.d*60)}</div>}
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {bodyView === 'sun' && <div style={{ marginTop: 5, fontSize: 9, color: '#555' }}>d = 0.2' S · v = nil (Sun)</div>}
+    </div>
+
+    {/* Time slider */}
+    <div style={{ background: 'rgba(14,30,60,0.6)', borderRadius: 7, padding: 9, marginBottom: 10 }}>
+      <div style={{ color: '#F4D03F', fontSize: 11, fontWeight: 700, marginBottom: 6 }}>Sight time: {bodyView==='sun' ? 14 : 0}h {String(mins).padStart(2,'0')}m {String(secs).padStart(2,'0')}s UTC</div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 5 }}>
+        <span style={{ fontSize: 10, color: '#aaa', minWidth: 60 }}>Minutes:</span>
+        <input type="range" min={0} max={59} value={mins} onChange={e => setMins(Number(e.target.value))} style={{ flex: 1 }} />
+        <span style={{ color: '#F4D03F', minWidth: 22, fontWeight: 700 }}>{mins}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span style={{ fontSize: 10, color: '#aaa', minWidth: 60 }}>Seconds:</span>
+        <input type="range" min={0} max={59} value={secs} onChange={e => setSecs(Number(e.target.value))} style={{ flex: 1 }} />
+        <span style={{ color: '#F4D03F', minWidth: 22, fontWeight: 700 }}>{secs}</span>
+      </div>
+    </div>
+
+    {/* Calculation breakdown */}
+    {bodyView === 'sun' ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {[
+          { label: `GHA Sun at 14h (tabulated)`,                 val: fmtGHA(sunData.gha_hr),    color: '#7EC8E3' },
+          { label: `+ Increment for ${mins}m ${secs}s  (15\'/min)`, val: `+${fmtGHA(gha_inc)}`, color: '#F4D03F' },
+          { label: `v correction — Sun has none`,                 val: '  nil',                   color: '#555' },
+          { label: '= GHA Sun at sight time',                     val: fmtGHA(sun_gha),           color: '#2ECC71', bold: true },
+          { label: '──────────────────────────────────────────',  val: '',                        color: '#1a3a5a' },
+          { label: `Dec Sun at 14h (tabulated)`,                  val: fmtDMS(sunData.dec),       color: '#7EC8E3' },
+          { label: `d correction  (d = 0.2\' per hour → ${(Math.abs(sunData.d)*totalMins*60).toFixed(1)}\')`, val: `${(sunData.d*totalMins*60).toFixed(1)}'`, color: '#F4D03F' },
+          { label: '= Declination at sight time',                 val: fmtDMS(sun_dec),           color: '#2ECC71', bold: true },
+        ].map((row, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px', background: row.bold ? 'rgba(39,174,96,0.12)' : 'transparent', borderRadius: 4, border: row.bold ? '1px solid rgba(39,174,96,0.4)' : 'none' }}>
+            <span style={{ fontSize: 10.5, color: row.color, fontWeight: row.bold ? 700 : 400 }}>{row.label}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: row.color, fontWeight: row.bold ? 700 : 400 }}>{row.val}</span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {[
+          { label: `GHA Aries at 0h (tabulated)`,              val: fmtGHA(ariesData.gha_hr),   color: '#7EC8E3' },
+          { label: `+ Increment for ${mins}m ${secs}s`,        val: `+${fmtGHA(gha_inc)}`,      color: '#F4D03F' },
+          { label: '= GHA Aries at sight time',                 val: fmtGHA(aries_gha),          color: '#85C1E9', bold: true },
+          { label: '──────────────────────────────────────────', val: '',                        color: '#1a3a5a' },
+          { label: 'SHA of Sirius (from star pages)',           val: fmtGHA(siriusData.sha),     color: '#A569BD' },
+          { label: '+ GHA Aries',                               val: fmtGHA(aries_gha),          color: '#85C1E9' },
+          { label: '= GHA Sirius   (subtract 360° if > 360°)', val: fmtGHA(sirius_gha),         color: '#2ECC71', bold: true },
+          { label: '──────────────────────────────────────────', val: '',                        color: '#1a3a5a' },
+          { label: 'Dec Sirius (constant — not tabulated hourly)', val: fmtDMS(siriusData.dec), color: '#2ECC71', bold: true },
+        ].map((row, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 8px', background: row.bold ? 'rgba(39,174,96,0.12)' : 'transparent', borderRadius: 4, border: row.bold ? '1px solid rgba(39,174,96,0.4)' : 'none' }}>
+            <span style={{ fontSize: 10.5, color: row.color, fontWeight: row.bold ? 700 : 400 }}>{row.label}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: row.color, fontWeight: row.bold ? 700 : 400 }}>{row.val}</span>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <div style={{ marginTop: 8, textAlign: 'center', fontSize: 10, color: '#2a4a6a' }}>
+      Drag the sliders to see how GHA changes with sight time. Then: LHA = GHA ± Longitude.
+    </div>
+   </div>
+  );
+ }
+
  // Registry of animated components
- const ANIM_REGISTRY = { CDMVTCompass: CDMVTCompassAnim, TidalCurve: TidalCurveAnim, CourseVectorTriangle: CourseVectorTriangleAnim, AmplitudeCompass: AmplitudeCompassAnim, TRSStructure: TRSStructureAnim, GlobalCirculation: GlobalCirculationAnim, FrontalSystem: FrontalSystemAnim, CompassConversion: CompassConversionAnim, GreatCircle: GreatCircleAnim, RadarPlot: RadarPlotAnim, MercatorScale: MercatorScaleAnim, ThreeBearingFix: ThreeBearingFixAnim, RunningFix: RunningFixAnim, MercatorSailing: MercatorSailingAnim, PlaneSailing: PlaneSailingAnim, DeadReckoning: DeadReckoningAnim, CourseToSteer: CourseToSteerAnim, DaysWork: DaysWorkAnim, RaisingDipping: RaisingDippingAnim, HSAFix: HSAFixAnim, SextantPrinciple: SextantPrincipleAnim, SextantParts: SextantPartsAnim, HSAGeometric: HSAGeometricAnim, SextantErrors: SextantErrorsAnim, GMStability: GMStabilityAnim, GZCurve: GZCurveAnim, FreeSurface: FreeSurfaceAnim, TrimCalc: TrimCalcAnim, WeightShift: WeightShiftAnim, InclingExp: InclingExpAnim, AngleOfLoll: AngleOfLollAnim, LoadLine: LoadLineAnim, StabCriteria: StabCriteriaAnim, DamageStab: DamageStabAnim, CelestialSphere: CelestialSphereAnim, PZXTriangle: PZXTriangleAnim, InterceptWorkflow: InterceptWorkflowAnim, GPCircle: GPCircleAnim, COLREGSSituation: COLREGSSituationAnim, BeaufortScale: BeaufortScaleAnim, ShipCrossSection: ShipCrossSectionAnim, WatchHandoverFlow: WatchHandoverFlowAnim, PassagePlanningFlow: PassagePlanningFlowAnim, DoublingAngle: DoublingAngleAnim, LineSoundings: LineSoundingsAnim, RunningFixCurrent: RunningFixCurrentAnim, LightsDisplay: LightsDisplayAnim, Rule19Fog: Rule19FogAnim, FogSignals: FogSignalsAnim, NarrowChannel: NarrowChannelAnim, ShipTypes: ShipTypesAnim, RORSituations: RORSituationsAnim, RORCards: RORCardsAnim };
+ const ANIM_REGISTRY = { CDMVTCompass: CDMVTCompassAnim, AltitudeCorrectionChain: AltitudeCorrectionChainAnim, AlmanacReader: AlmanacReaderAnim, TidalCurve: TidalCurveAnim, CourseVectorTriangle: CourseVectorTriangleAnim, AmplitudeCompass: AmplitudeCompassAnim, TRSStructure: TRSStructureAnim, GlobalCirculation: GlobalCirculationAnim, FrontalSystem: FrontalSystemAnim, CompassConversion: CompassConversionAnim, GreatCircle: GreatCircleAnim, RadarPlot: RadarPlotAnim, MercatorScale: MercatorScaleAnim, ThreeBearingFix: ThreeBearingFixAnim, RunningFix: RunningFixAnim, MercatorSailing: MercatorSailingAnim, PlaneSailing: PlaneSailingAnim, DeadReckoning: DeadReckoningAnim, CourseToSteer: CourseToSteerAnim, DaysWork: DaysWorkAnim, RaisingDipping: RaisingDippingAnim, HSAFix: HSAFixAnim, SextantPrinciple: SextantPrincipleAnim, SextantParts: SextantPartsAnim, HSAGeometric: HSAGeometricAnim, SextantErrors: SextantErrorsAnim, GMStability: GMStabilityAnim, GZCurve: GZCurveAnim, FreeSurface: FreeSurfaceAnim, TrimCalc: TrimCalcAnim, WeightShift: WeightShiftAnim, InclingExp: InclingExpAnim, AngleOfLoll: AngleOfLollAnim, LoadLine: LoadLineAnim, StabCriteria: StabCriteriaAnim, DamageStab: DamageStabAnim, CelestialSphere: CelestialSphereAnim, PZXTriangle: PZXTriangleAnim, InterceptWorkflow: InterceptWorkflowAnim, GPCircle: GPCircleAnim, COLREGSSituation: COLREGSSituationAnim, BeaufortScale: BeaufortScaleAnim, ShipCrossSection: ShipCrossSectionAnim, WatchHandoverFlow: WatchHandoverFlowAnim, PassagePlanningFlow: PassagePlanningFlowAnim, DoublingAngle: DoublingAngleAnim, LineSoundings: LineSoundingsAnim, RunningFixCurrent: RunningFixCurrentAnim, LightsDisplay: LightsDisplayAnim, Rule19Fog: Rule19FogAnim, FogSignals: FogSignalsAnim, NarrowChannel: NarrowChannelAnim, ShipTypes: ShipTypesAnim, RORSituations: RORSituationsAnim, RORCards: RORCardsAnim };
 
  // Error boundary — catches any runtime crash inside an animated diagram so only that card fails, not the whole page
  class AnimErrorBoundary extends Component {
@@ -13982,6 +14626,46 @@ export default function App() {
 
  {/* LEFT column — Login + Contents below */}
  <div style={{ flex: "1 1 440px", maxWidth: 520, display: "flex", flexDirection: "column", gap: 20 }}>
+
+ {/* ── Newly Added: AI Orals Assessment Banner (login page) ── */}
+ <div style={{
+  borderRadius: 16, overflow: "hidden",
+  background: "linear-gradient(135deg, rgba(42,26,78,0.85) 0%, rgba(26,14,58,0.85) 50%, rgba(13,26,46,0.85) 100%)",
+  backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+  border: "1.5px solid rgba(212,175,55,0.35)",
+  boxShadow: "0 8px 40px rgba(123,79,168,0.3), inset 0 1px 0 rgba(255,255,255,0.04)",
+  position: "relative",
+ }}>
+  {/* Animated shimmer top bar */}
+  <div style={{ height: 4, background: "linear-gradient(90deg, #d4af37, #7B4FA8, #d4af37, #e05c00, #d4af37)", backgroundSize: "300% 100%", animation: "shimmer 3s linear infinite" }} />
+  <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+   {/* Icon */}
+   <div style={{ width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+    background: "linear-gradient(135deg, #7B4FA8, #4a2080)",
+    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+    boxShadow: "0 4px 16px rgba(123,79,168,0.5)" }}>🤖</div>
+   {/* Text */}
+   <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+     <span style={{ fontSize: 9, fontWeight: 800, background: "linear-gradient(90deg,#d4af37,#e07820)",
+      color: "#fff", padding: "2px 8px", borderRadius: 20, letterSpacing: 1, textTransform: "uppercase" }}>
+      ✨ New
+     </span>
+     <span style={{ fontSize: 9, fontWeight: 700, background: "rgba(123,79,168,0.25)", color: "#c9a6ff",
+      padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(123,79,168,0.4)" }}>
+      AI Powered
+     </span>
+    </div>
+    <div style={{ fontSize: 15, fontWeight: 800, color: "#fff",
+     fontFamily: "'Playfair Display', serif", marginBottom: 2, letterSpacing: 0.2 }}>
+     AI Oral Exam Assessment
+    </div>
+    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>
+     Speak your answer — AI examiner transcribes &amp; scores it against key points. Sign in to try it.
+    </div>
+   </div>
+  </div>
+ </div>
 
  {/* Login Card — compact */}
  <div style={{
@@ -14311,6 +14995,8 @@ export default function App() {
  const totalTopics = getAllTopics().length;
  const completedTopics = Object.values(progress).filter(p => p.completed).length;
  const totalMCQs = getAllMCQs().length;
+ const srsData = getSRS();
+ const srsDue = getAllMCQsRich().filter(q => { const c = srsData[q.id]; return !c || c.dueDate <= Date.now(); }).length;
  const quizAttempts = Object.values(progress).reduce((a, p) => a + (p.quizAttempts || 0), 0);
  const readyPct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
 
@@ -14538,16 +15224,73 @@ export default function App() {
  })}
  </div>
 
+ {/* ── Newly Added: AI Orals Assessment Banner ── */}
+ <div onClick={() => navigate("ai-oral")} style={{
+  cursor: "pointer", marginBottom: 28, borderRadius: 16, overflow: "hidden",
+  background: darkMode
+   ? "linear-gradient(135deg, #2a1a4e 0%, #1a0e3a 50%, #0d1a2e 100%)"
+   : "linear-gradient(135deg, #f0e8ff 0%, #e8f0ff 50%, #fff0e8 100%)",
+  border: `1.5px solid ${darkMode ? "rgba(212,175,55,0.35)" : "rgba(123,79,168,0.25)"}`,
+  boxShadow: darkMode ? "0 4px 32px rgba(123,79,168,0.25)" : "0 4px 24px rgba(123,79,168,0.12)",
+  position: "relative",
+ }}
+ onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = darkMode ? "0 8px 40px rgba(123,79,168,0.4)" : "0 8px 32px rgba(123,79,168,0.2)"; }}
+ onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}>
+  {/* Animated shimmer top bar */}
+  <div style={{ height: 4, background: "linear-gradient(90deg, #d4af37, #7B4FA8, #d4af37, #e05c00, #d4af37)", backgroundSize: "300% 100%", animation: "shimmer 3s linear infinite" }} />
+  <div style={{ padding: "20px 24px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+   {/* Icon */}
+   <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0,
+    background: "linear-gradient(135deg, #7B4FA8, #4a2080)",
+    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
+    boxShadow: "0 4px 16px rgba(123,79,168,0.4)" }}>🤖</div>
+   {/* Text */}
+   <div style={{ flex: 1, minWidth: 200 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+     <span style={{ fontSize: 11, fontWeight: 800, background: "linear-gradient(90deg,#d4af37,#e07820)",
+      color: "#fff", padding: "3px 10px", borderRadius: 20, letterSpacing: 1, textTransform: "uppercase" }}>
+      ✨ Newly Added
+     </span>
+     <span style={{ fontSize: 11, fontWeight: 700, background: "#7B4FA822", color: "#7B4FA8",
+      padding: "3px 10px", borderRadius: 20, border: "1px solid #7B4FA840" }}>
+      AI Powered
+     </span>
+    </div>
+    <div style={{ fontSize: 18, fontWeight: 800, color: darkMode ? "#fff" : "#1a0e3a",
+     fontFamily: "'Playfair Display', serif", marginBottom: 4 }}>
+     AI Oral Exam Assessment
+    </div>
+    <div style={{ fontSize: 13, color: theme.textMuted, lineHeight: 1.6 }}>
+     Speak your answer — AI examiner transcribes your voice, evaluates it against key points, and shows exactly what you missed. Powered by Groq Whisper + LLaMA 3.
+    </div>
+   </div>
+   {/* CTA */}
+   <div style={{ flexShrink: 0 }}>
+    <div style={{ padding: "10px 22px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+     background: "linear-gradient(135deg, #7B4FA8, #4a2080)", color: "#fff",
+     display: "flex", alignItems: "center", gap: 6,
+     boxShadow: "0 4px 14px rgba(123,79,168,0.4)" }}>
+     Try it now →
+    </div>
+   </div>
+  </div>
+ </div>
+
  {/* ── Quick Access ── */}
  <div style={{ display: "flex", alignItems: "baseline", gap: 14, marginBottom: 22 }}>
  <h2 style={{ ...css.sectionTitle, fontSize: 24, marginBottom: 0 }}>Quick access</h2>
  </div>
  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 18 }}>
  {[
- { icon: "🎤", title: "Oral Exam Preparation", desc: `${ORAL_SCENARIOS.length} scenario-based questions with model answers for viva voce`, page: "oral", color: "#7B4FA8" },
- { icon: "📊", title: "Progress Dashboard", desc: "Track your exam readiness across all subjects with detailed analytics", page: "dashboard", color: theme.accent },
+ { icon: "🎯", title: "Full Mock Examination", desc: `Timed 100-question exam with subject breakdown and pass/fail analysis — simulates the real paper`, page: "mockexam", color: "#E05C00" },
+ { icon: "🧠", title: "Spaced Repetition Review", desc: srsDue > 0 ? `${srsDue} MCQ${srsDue !== 1 ? "s" : ""} due for review today — keep your knowledge sharp` : "No cards due today — great work! Review queue will refresh tomorrow", page: "srs-review", color: "#2E7D32", badge: srsDue > 0 ? srsDue : null },
+ { icon: "🃏", title: "Flashcard Decks", desc: `${FLASHCARD_DECKS.reduce((a,d)=>a+d.cards.length,0)}+ key-term cards across ${FLASHCARD_DECKS.length} curated decks — plus MCQ cards from every subject`, page: "flashcards", color: "#6A1B9A" },
+ { icon: "🚢", title: "COLREGS Lights Quiz", desc: `${LIGHTS_QUIZ.length} night-light diagrams — identify vessel types by their light configurations`, page: "lights-quiz", color: "#1565C0" },
+ { icon: "🎤", title: "Oral Exam Preparation", desc: `${ORAL_SCENARIOS.length} scenario-based questions — now with AI voice assessment. Speak your answer, get instant examiner feedback.`, page: "oral", color: "#7B4FA8", badge: "AI" },
+ { icon: "📊", title: "Progress Dashboard", desc: "Oral performance tracking, weak area analysis, spaced repetition, and your personalised study plan", page: "dashboard", color: theme.accent },
+ { icon: "📋", title: "MMD Exam Reports", desc: "See what was actually asked at Mumbai, Chennai, Kolkata & other MMDs — submit your own report after your oral", page: "exam-reports", color: "#2E7D8A" },
  { icon: "∑", title: "Formula Reference", desc: "Quick-reference sheet for all navigational and meteorological formulas", page: "formulas", color: theme.warning, iconFont: true },
- ].map(({ icon, title, desc, page: pg, color, iconFont }) => (
+ ].map(({ icon, title, desc, page: pg, color, iconFont, badge }) => (
  <div key={pg}
  style={{
  ...css.card, cursor: "pointer", padding: 0, overflow: "hidden"
@@ -14561,16 +15304,19 @@ export default function App() {
  {/* accent top bar */}
  <div style={{ height: 3, background: `linear-gradient(90deg, ${color} 0%, ${color}60 100%)` }} />
  <div style={{ padding: "24px 24px 20px" }}>
- {/* icon box */}
- <div style={{
- width: 52, height: 52, borderRadius: 14, marginBottom: 18,
- background: `linear-gradient(135deg, ${color}20 0%, ${color}0A 100%)`,
- border: `1px solid ${color}28`,
- display: "flex", alignItems: "center", justifyContent: "center",
- fontSize: iconFont ? 26 : 28, color: color,
- fontFamily: iconFont ? "'JetBrains Mono', monospace" : undefined,
- fontWeight: iconFont ? 700 : undefined
- }}>{icon}</div>
+ {/* icon box with optional badge */}
+ <div style={{ position: "relative", width: 52, marginBottom: 18 }}>
+  <div style={{
+  width: 52, height: 52, borderRadius: 14,
+  background: `linear-gradient(135deg, ${color}20 0%, ${color}0A 100%)`,
+  border: `1px solid ${color}28`,
+  display: "flex", alignItems: "center", justifyContent: "center",
+  fontSize: iconFont ? 26 : 28, color: color,
+  fontFamily: iconFont ? "'JetBrains Mono', monospace" : undefined,
+  fontWeight: iconFont ? 700 : undefined
+  }}>{icon}</div>
+  {badge && <div style={{ position: "absolute", top: -6, right: -6, minWidth: 20, height: 20, borderRadius: 10, background: typeof badge === 'string' ? "linear-gradient(135deg,#7B4FA8,#4a2080)" : theme.danger, color: "#fff", fontSize: 10, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", boxShadow: typeof badge === 'string' ? "0 2px 8px rgba(123,79,168,0.6)" : `0 2px 8px ${theme.danger}60` }}>{typeof badge === 'number' && badge > 99 ? "99+" : badge}</div>}
+ </div>
  <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8, fontFamily: "'Playfair Display', serif", color: theme.text, letterSpacing: -0.2 }}>{title}</div>
  <div style={{ fontSize: 13, color: theme.textMuted, lineHeight: 1.6 }}>{desc}</div>
  </div>
@@ -14846,12 +15592,359 @@ export default function App() {
  );
  };
 
+ // ═══════════════════════════════════════════════
+ // BOOK VIEW — Classy typeset reading experience
+ // ═══════════════════════════════════════════════
+ const BookPageRenderer = ({ topic, subject, mod, topicIdx }) => {
+   const PAPER   = darkMode ? '#1C1610' : '#FDF8EE';
+   const INK     = darkMode ? '#D8CDBA' : '#1A1612';
+   const INKSOFT = darkMode ? '#A89880' : '#3D342C';
+   const MUTED   = darkMode ? '#7A6A5A' : '#8A7A6E';
+   const RULE    = darkMode ? '#3A2E22' : '#C4BAB0';
+   const ACCENT  = subject.color;
+
+   // Reading time (computed locally — not available from outer scope)
+   const bookWordCount = (() => {
+     let w = 0;
+     if (topic.content) w += topic.content.split(/\s+/).length;
+     (topic.sections || []).forEach(s => {
+       if (s.body) w += s.body.split(/\s+/).length;
+       (s.paragraphs || []).forEach(p => { w += p.split(/\s+/).length; });
+     });
+     return w;
+   })();
+   const bookReadMins = Math.max(1, Math.ceil(bookWordCount / 220));
+
+   // Roman numeral helper for section headings
+   const toRoman = (n) => {
+     const v=[1000,900,500,400,100,90,50,40,10,9,5,4,1];
+     const s=['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+     let r=''; for(let i=0;i<v.length;i++) while(n>=v[i]){r+=s[i];n-=v[i];} return r;
+   };
+   const topicRoman = toRoman((topicIdx || 0) + 1);
+
+   const sections    = topic.sections || [];
+   const allParas    = sections.filter(s => s.type === 'narrative')
+     .flatMap(s => s.paragraphs || (s.body ? s.body.split('\n\n') : []));
+   const formulaSecs = sections.filter(s => s.type === 'formula-block');
+   const calloutSecs = sections.filter(s => s.type === 'callout');
+
+   // Pre-compute section numbers (Roman)
+   let hCnt = 0;
+   const sectionRomans = allParas.map(p => (p && p.startsWith('# ')) ? toRoman(++hCnt) : null);
+
+   // Index of first plain paragraph — for drop cap & no-indent rule
+   const firstPlainIdx = allParas.findIndex(p =>
+     p && !p.startsWith('#') && !p.startsWith('•') &&
+     !p.startsWith('- ') && p !== '---' && p !== '***' && p.length > 5
+   );
+   // Track whether we're still in the "opener" run before first section break
+   const firstSectionBreak = allParas.findIndex(p => p && p.startsWith('# '));
+
+   const renderPara = (para, i) => {
+     if (!para || !para.trim()) return null;
+
+     // Section break ornament
+     if (para === '---' || para === '***') return (
+       <div key={i} style={{ textAlign:'center', margin:'36px 0', color:MUTED,
+         fontFamily:'Georgia,serif', fontSize:14, letterSpacing:10 }}>⁂</div>
+     );
+
+     // H1 — section heading (centered, Roman numeral, thin rule)
+     if (para.startsWith('# ')) {
+       const roman = sectionRomans[i];
+       return (
+         <div key={i} style={{ textAlign:'center', margin:`${i===0?'0':'52px'} 0 24px` }}>
+           <div style={{ fontFamily:'Georgia,serif', fontSize:11, color:MUTED,
+             letterSpacing:4, textTransform:'uppercase', marginBottom:10 }}>{roman}</div>
+           <h2 style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'normal',
+             color:INK, margin:'0 0 16px', lineHeight:1.35, letterSpacing:-0.2 }}>{para.slice(2)}</h2>
+           <div style={{ width:56, height:1, background:RULE, margin:'0 auto' }} />
+         </div>
+       );
+     }
+
+     // H2 — sub-heading, italic, left-aligned with small em-dash accent
+     if (para.startsWith('## ')) return (
+       <div key={i} style={{ margin:'32px 0 12px' }}>
+         <h3 style={{ fontFamily:'Georgia,serif', fontSize:16, fontWeight:'normal',
+           fontStyle:'italic', color:INKSOFT, margin:0, letterSpacing:0.1,
+           paddingLeft:4, borderLeft:`2px solid ${RULE}` }}>{para.slice(3)}</h3>
+       </div>
+     );
+
+     // H3 — marginal label
+     if (para.startsWith('### ')) return (
+       <p key={i} style={{ fontFamily:'Georgia,serif', fontSize:10.5, fontWeight:'normal',
+         textTransform:'uppercase', letterSpacing:3, color:MUTED,
+         margin:'24px 0 6px', textAlign:'center' }}>{para.slice(4)}</p>
+     );
+
+     // Bullet — book-style with em-dash
+     const isBullet = para.startsWith('• ') || para.startsWith('- ');
+     if (isBullet) return (
+       <div key={i} style={{ display:'flex', gap:12, margin:'0 0 8px', paddingLeft:18 }}>
+         <span style={{ fontFamily:'Georgia,serif', color:MUTED, fontSize:15.5,
+           lineHeight:1.9, flexShrink:0, userSelect:'none' }}>—</span>
+         <p style={{ fontFamily:'Georgia,serif', fontSize:16, lineHeight:1.9,
+           color:INK, margin:0, textAlign:'justify', hyphens:'auto' }}>{parseInline(para.slice(2))}</p>
+       </div>
+     );
+
+     // ── Plain paragraph ────────────────────────────────────────────
+     // Drop cap on very first plain paragraph
+     if (i === firstPlainIdx && para.length > 3) {
+       const first = para[0];
+       const rest  = para.slice(1);
+       return (
+         <p key={i} style={{ fontFamily:'Georgia,serif', fontSize:16, lineHeight:1.9,
+           color:INK, margin:'0 0 0', textAlign:'justify', hyphens:'auto', overflow:'hidden' }}>
+           <span style={{
+             float:'left', fontFamily:'Georgia,serif', fontSize:84, lineHeight:0.72,
+             color:ACCENT, paddingRight:10, paddingTop:11, paddingBottom:4,
+             fontWeight:'normal', userSelect:'none'
+           }}>{first}</span>
+           {parseInline(rest)}
+         </p>
+       );
+     }
+
+     // All other paragraphs: indent continuation (book style), no bottom gap
+     // Exception: paragraph right after a heading gets no indent
+     const prevPara = allParas[i - 1];
+     const afterHeading = !prevPara || prevPara.startsWith('#') ||
+       prevPara === '---' || prevPara === '***';
+     return (
+       <p key={i} style={{
+         fontFamily:'Georgia,serif', fontSize:16, lineHeight:1.9,
+         color:INK, margin:'0 0 0',
+         textIndent: afterHeading ? '0' : '1.6em',
+         textAlign:'justify', hyphens:'auto'
+       }}>{parseInline(para)}</p>
+     );
+   };
+
+   // Thin horizontal rule shared between sections
+   const HR = () => (
+     <div style={{ display:'flex', alignItems:'center', gap:16, margin:'36px 0' }}>
+       <div style={{ flex:1, height:1, background:RULE }} />
+       <span style={{ fontFamily:'Georgia,serif', fontSize:11, color:MUTED, letterSpacing:6 }}>❦</span>
+       <div style={{ flex:1, height:1, background:RULE }} />
+     </div>
+   );
+
+   return (
+     <div style={{
+       maxWidth: 720, margin:'0 auto 40px', background:PAPER,
+       position:'relative', borderRadius:1,
+       borderLeft:`6px solid ${ACCENT}`,
+       boxShadow: darkMode
+         ? `3px 0 0 #100D08 inset, 5px 5px 0 #110E09, 10px 10px 0 #0A0806, 0 32px 80px rgba(0,0,0,0.65)`
+         : `3px 0 0 #F0E8D8 inset, 5px 5px 0 #E8DFD0, 10px 10px 0 #DDD4C4, 0 32px 80px rgba(0,0,0,0.12)`,
+     }}>
+
+       {/* ── Running header ─────────────────────────────────────────── */}
+       <div style={{ padding:'18px 68px 0' }}>
+         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline',
+           paddingBottom:10, borderBottom:`1px solid ${RULE}` }}>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:10, color:MUTED, fontStyle:'italic',
+             letterSpacing:0.3 }}>{subject.icon} {subject.name}</span>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:9, color:MUTED,
+             letterSpacing:3.5, textTransform:'uppercase' }}>NavPrep 2M</span>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:10, color:MUTED, fontStyle:'italic',
+             letterSpacing:0.3 }}>{mod.name}</span>
+         </div>
+       </div>
+
+       {/* ── Chapter title block ────────────────────────────────────── */}
+       <div style={{ padding:'52px 68px 44px', textAlign:'center', position:'relative' }}>
+         {/* Ghost Roman numeral watermark */}
+         <div style={{ position:'absolute', top:28, right:56,
+           fontFamily:'Georgia,serif', fontSize:120, fontWeight:'bold',
+           color:ACCENT, opacity: darkMode ? 0.055 : 0.045,
+           lineHeight:1, pointerEvents:'none', userSelect:'none',
+           letterSpacing:-4, fontStyle:'italic' }}>{topicRoman}</div>
+
+         {/* Module label */}
+         <div style={{ fontFamily:'Georgia,serif', fontSize:9.5, color:MUTED,
+           letterSpacing:4.5, textTransform:'uppercase', marginBottom:28 }}>{mod.name}</div>
+
+         {/* Title */}
+         <h1 style={{ fontFamily:'Georgia,serif', fontSize:32, fontWeight:'normal',
+           color:INK, margin:0, lineHeight:1.35, letterSpacing:-0.5 }}>{topic.name}</h1>
+
+         {/* Ornament + reading time */}
+         <div style={{ margin:'28px 0 0' }}>
+           <div style={{ display:'flex', alignItems:'center', gap:18, justifyContent:'center', marginBottom:14 }}>
+             <div style={{ width:60, height:1, background:RULE }} />
+             <span style={{ fontFamily:'Georgia,serif', fontSize:16, color:MUTED }}>❧</span>
+             <div style={{ width:60, height:1, background:RULE }} />
+           </div>
+           <div style={{ fontFamily:'Georgia,serif', fontSize:11, color:MUTED,
+             fontStyle:'italic', letterSpacing:0.5 }}>
+             {bookReadMins} min read
+           </div>
+         </div>
+       </div>
+
+       {/* ── Body text ──────────────────────────────────────────────── */}
+       <div style={{ padding:'0 68px 56px', overflow:'hidden' }}>
+         {allParas.length > 0
+           ? allParas.map((p, i) => renderPara(p, i))
+           : <p style={{ fontFamily:'Georgia,serif', fontSize:16, color:MUTED,
+               fontStyle:'italic', textAlign:'center', padding:'56px 0' }}>
+               Content for this topic is being prepared.
+             </p>
+         }
+
+         {/* ── Formula typeset blocks ─────────────────────────────── */}
+         {formulaSecs.length > 0 && (
+           <>
+             <HR />
+             {formulaSecs.map((fs, fi) => (
+               <div key={fi} style={{ margin:'0 0 28px' }}>
+                 {fs.title && (
+                   <div style={{ fontFamily:'Georgia,serif', fontSize:10, textTransform:'uppercase',
+                     letterSpacing:3, color:MUTED, textAlign:'center', marginBottom:18 }}>{fs.title}</div>
+                 )}
+                 {(fs.formulas || []).map((f, fj) => (
+                   <div key={fj} style={{ textAlign:'center', margin:'12px 0' }}>
+                     <div style={{ display:'inline-block', textAlign:'left',
+                       fontFamily:"'JetBrains Mono','Courier New',monospace",
+                       fontSize:14, color:INK, padding:'14px 28px',
+                       borderTop:`1px solid ${RULE}`, borderBottom:`1px solid ${RULE}`,
+                       background: darkMode ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.015)',
+                       letterSpacing:0.5 }}>{f}</div>
+                   </div>
+                 ))}
+               </div>
+             ))}
+           </>
+         )}
+
+         {/* ── Callout / note blocks ──────────────────────────────── */}
+         {calloutSecs.map((cs, ci) => (
+           <div key={ci} style={{ margin:'32px 24px', padding:'20px 24px 20px 28px',
+             borderLeft:`1px solid ${RULE}`, borderRight:`1px solid ${RULE}`,
+             borderTop:`1px solid ${RULE}`, borderBottom:`1px solid ${RULE}`,
+             position:'relative' }}>
+             {cs.title && (
+               <div style={{ fontFamily:'Georgia,serif', fontSize:10, textTransform:'uppercase',
+                 letterSpacing:3, color:MUTED, marginBottom:12 }}>{cs.title}</div>
+             )}
+             <p style={{ fontFamily:'Georgia,serif', fontSize:15, lineHeight:1.85,
+               color:INKSOFT, margin:0, fontStyle:'italic' }}>{cs.text || cs.body || ''}</p>
+           </div>
+         ))}
+       </div>
+
+       {/* ── Page footer ────────────────────────────────────────────── */}
+       <div style={{ padding:'0 68px 22px' }}>
+         <div style={{ borderTop:`1px solid ${RULE}`, paddingTop:12,
+           display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:10, color:MUTED,
+             fontStyle:'italic' }}>NavPrep 2M</span>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:11, color:MUTED,
+             letterSpacing:3 }}>— {topicRoman} —</span>
+           <span style={{ fontFamily:'Georgia,serif', fontSize:10, color:MUTED,
+             fontStyle:'italic' }}>{subject.name}</span>
+         </div>
+       </div>
+     </div>
+   );
+ };
+
  const TopicPage = () => {
  if (!selectedTopic || !selectedSubject || !selectedModule) return null;
  const topic = selectedTopic;
  const isBookmarked = bookmarks.includes(topic.id);
  const enrichment = TOPIC_ENRICHMENTS[topic.id];
  const subj = selectedSubject;
+ const [bookView, setBookView] = useState(false);
+
+ // ── Audio Read-Aloud ───────────────────────────────────────────
+ const [audioPlaying, setAudioPlaying] = useState(false);
+ const [audioPaused, setAudioPaused] = useState(false);
+ const [audioRate, setAudioRate] = useState(1.0);
+ const audioUtterRef = useRef(null);
+ const keepAliveRef = useRef(null);
+ const sessionRef = useRef(0);
+ const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+ const getReadText = () => {
+   // Strip markdown symbols so TTS doesn't say "asterisk asterisk" etc.
+   const clean = (s) => (s || '')
+     .replace(/#{1,6}\s+/g, '')
+     .replace(/\*\*([^*]+)\*\*/g, '$1')
+     .replace(/\*([^*]+)\*/g, '$1')
+     .replace(/`([^`]+)`/g, '$1')
+     .replace(/^[-•]\s+/gm, '')
+     .replace(/^\d+\.\s+/gm, '');
+   let text = topic.name + '. ';
+   if (topic.content) text += clean(topic.content) + ' ';
+   (topic.sections || []).forEach(s => {
+     if (s.title) text += clean(s.title) + '. ';
+     if (s.body) text += clean(s.body) + ' ';
+     (s.paragraphs || []).forEach(p => { text += clean(p) + ' '; });
+   });
+   return text.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+ };
+
+ const stopAudio = () => {
+   sessionRef.current++;
+   if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
+   window.speechSynthesis.cancel();
+   setAudioPlaying(false);
+   setAudioPaused(false);
+ };
+
+ const startAudio = (rate) => {
+   if (!speechSupported) return;
+   stopAudio();
+   const spokenRate = rate !== undefined ? rate : audioRate;
+   const session = ++sessionRef.current;
+   // Split into ~250-char sentence chunks — Chrome's TTS engine silently cuts out on long single utterances
+   const raw = getReadText().match(/[^.!?]+[.!?]*\s*/g) || [getReadText()];
+   const chunks = [];
+   let buf = '';
+   for (const s of raw) {
+     if (buf.length + s.length > 250 && buf) { chunks.push(buf.trim()); buf = s; }
+     else buf += s;
+   }
+   if (buf.trim()) chunks.push(buf.trim());
+   let idx = 0;
+   const speakNext = () => {
+     if (sessionRef.current !== session) return; // guard: stop/restart happened
+     if (idx >= chunks.length) {
+       if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
+       setAudioPlaying(false); setAudioPaused(false); return;
+     }
+     const u = new SpeechSynthesisUtterance(chunks[idx++]);
+     u.rate = spokenRate; u.pitch = 1; u.lang = 'en-GB';
+     u.onend = speakNext;
+     u.onerror = (e) => {
+       if (sessionRef.current === session && e.error !== 'interrupted' && e.error !== 'canceled') {
+         if (keepAliveRef.current) { clearInterval(keepAliveRef.current); keepAliveRef.current = null; }
+         setAudioPlaying(false); setAudioPaused(false);
+       }
+     };
+     audioUtterRef.current = u;
+     window.speechSynthesis.speak(u);
+   };
+   speakNext();
+   setAudioPlaying(true); setAudioPaused(false);
+   // Chrome keepalive: prevents speechSynthesis from going silent mid-utterance
+   keepAliveRef.current = setInterval(() => {
+     if (!window.speechSynthesis.speaking || window.speechSynthesis.paused) return;
+     window.speechSynthesis.pause(); window.speechSynthesis.resume();
+   }, 10000);
+ };
+
+ const pauseAudio = () => { window.speechSynthesis.pause(); setAudioPaused(true); };
+ const resumeAudio = () => { window.speechSynthesis.resume(); setAudioPaused(false); };
+
+ // Stop speech when leaving the page
+ useEffect(() => { return () => { if (speechSupported) { if (keepAliveRef.current) clearInterval(keepAliveRef.current); window.speechSynthesis.cancel(); } }; }, []);
 
  // ── Reading time estimate ──────────────────────────────────────
  const wordCount = (() => {
@@ -14968,7 +16061,7 @@ export default function App() {
        )}
      </div>
      {/* Actions */}
-     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
        <button style={{ ...css.btn(), fontSize: 12, padding: "7px 14px" }} onClick={() => toggleBookmark(topic.id)}>
          {isBookmarked ? "★ Bookmarked" : "☆ Bookmark"}
        </button>
@@ -14976,10 +16069,94 @@ export default function App() {
          ? <span style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", display: "flex", alignItems: "center", gap: 5 }}>✅ Completed</span>
          : <button style={{ ...css.btn("success"), fontSize: 12, padding: "7px 14px" }} onClick={() => markTopicComplete(topic.id)}>✓ Mark complete</button>
        }
+       {/* Audio read-aloud */}
+       {speechSupported && !bookView && (
+         !audioPlaying ? (
+           <button
+             onClick={startAudio}
+             style={{
+               display: "flex", alignItems: "center", gap: 5,
+               fontSize: 11, padding: "5px 13px", borderRadius: 8, cursor: "pointer",
+               fontWeight: 600, border: `1px solid ${theme.border}`,
+               background: theme.surfaceAlt, color: theme.textMuted, transition: "all 0.18s",
+             }}
+             title="Read this topic aloud"
+             onMouseEnter={e => { e.currentTarget.style.borderColor = "#2E7D32"; e.currentTarget.style.color = "#2E7D32"; }}
+             onMouseLeave={e => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textMuted; }}
+           >
+             🔊 Read aloud
+           </button>
+         ) : (
+           <div style={{ display: "flex", alignItems: "center", gap: 6,
+             padding: "4px 10px 4px 12px", borderRadius: 8,
+             background: "#2E7D3218", border: "1px solid #2E7D3240" }}>
+             <span style={{ fontSize: 11, fontWeight: 700, color: "#2E7D32" }}>🔊</span>
+             <button onClick={audioPaused ? resumeAudio : pauseAudio}
+               style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14,
+                color: "#2E7D32", padding: "0 2px" }}
+               title={audioPaused ? "Resume" : "Pause"}>
+               {audioPaused ? "▶" : "⏸"}
+             </button>
+             {/* Speed selector */}
+             <select value={audioRate} onChange={e => { const r = parseFloat(e.target.value); setAudioRate(r); startAudio(r); }}
+               style={{ background: "none", border: "none", fontSize: 11, color: "#2E7D32",
+                fontWeight: 600, cursor: "pointer", outline: "none" }}>
+               {[0.75, 1.0, 1.25, 1.5, 2.0].map(r => <option key={r} value={r}>{r}×</option>)}
+             </select>
+             <button onClick={stopAudio}
+               style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12,
+                color: theme.textMuted, padding: "0 2px" }}
+               title="Stop">⏹</button>
+           </div>
+         )
+       )}
+
+       {/* View mode — Interactive is primary; Book is an optional secondary toggle */}
+       {!bookView ? (
+         <button
+           onClick={() => { stopAudio(); setBookView(true); }}
+           style={{
+             marginLeft: "auto", display: "flex", alignItems: "center", gap: 5,
+             fontSize: 11, padding: "5px 13px", borderRadius: 8, cursor: "pointer",
+             fontWeight: 600, border: `1px solid ${theme.border}`,
+             background: theme.surfaceAlt, color: theme.textMuted,
+             transition: "all 0.18s",
+           }}
+           title="Switch to classic book-style reading view"
+           onMouseEnter={e => { e.currentTarget.style.borderColor = subj.color; e.currentTarget.style.color = subj.color; }}
+           onMouseLeave={e => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.color = theme.textMuted; }}
+         >
+           📖 Book view
+         </button>
+       ) : (
+         <button
+           onClick={() => setBookView(false)}
+           style={{
+             marginLeft: "auto", display: "flex", alignItems: "center", gap: 5,
+             fontSize: 11, padding: "5px 13px", borderRadius: 8, cursor: "pointer",
+             fontWeight: 600, border: `1.5px solid ${subj.color}`,
+             background: subj.color + "18", color: subj.color,
+             transition: "all 0.18s",
+           }}
+           title="Return to interactive theory view"
+         >
+           ⚡ Interactive
+         </button>
+       )}
      </div>
    </div>
  </div>
 
+ {/* ── Book View ────────────────────────────────────────── */}
+ {bookView ? (
+   <BookPageRenderer
+     topic={topic}
+     subject={subj}
+     mod={selectedModule}
+     topicIdx={currentIdx}
+   />
+ ) : (
+ <>
  {/* ── Fun Fact ─────────────────────────────────────────── */}
  {enrichment?.funFact && <DidYouKnowBox text={enrichment.funFact} />}
 
@@ -15047,6 +16224,8 @@ export default function App() {
 
  {/* MCQ section — collapsible, shown at bottom regardless of content type */}
  {(topic.mcqs||[]).length > 0 && <CollapsibleMCQSection topic={topic} />}
+ </>
+ )}
 
  {/* ── Bottom navigation ─────────────────────────────── */}
  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, gap: 12, flexWrap: "wrap" }}>
@@ -15065,6 +16244,1052 @@ export default function App() {
  </div>
  </div>
  );
+ };
+
+ // ═══════════════════════════════════════════════
+ // PAGE: MOCK EXAM
+ // ═══════════════════════════════════════════════
+ const MockExamPage = () => {
+  const allQsRich = getAllMCQsRich();
+  const [phase, setPhase] = useState('setup'); // 'setup' | 'exam' | 'results'
+  const [numQs, setNumQs] = useState(Math.min(100, allQsRich.length));
+  const [filteredSubjs, setFilteredSubjs] = useState(() => new Set(SUBJECTS.map(s => s.id)));
+  const [examQs, setExamQs] = useState([]);
+  const [answers, setAnswers] = useState({}); // idx → chosen option int
+  const [flagged, setFlagged] = useState(() => new Set());
+  const [currentQ, setCurrentQ] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(9000);
+  const [showNavPanel, setShowNavPanel] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+  const timerRef = useRef(null);
+
+  const fmt = (s) => {
+   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+   return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+  };
+
+  const buildExam = () => {
+   const pool = allQsRich.filter(q => filteredSubjs.has(q.subjectId));
+   if (!pool.length) { alert("No MCQs available for selected subjects."); return; }
+   const n = Math.min(numQs, pool.length);
+   const bySubj = {};
+   pool.forEach(q => { (bySubj[q.subjectId] = bySubj[q.subjectId] || []).push(q); });
+   let selected = [];
+   Object.entries(bySubj).forEach(([, qs]) => {
+    const n2 = Math.max(1, Math.round((qs.length / pool.length) * n));
+    selected.push(...[...qs].sort(() => Math.random() - 0.5).slice(0, n2));
+   });
+   selected = [...selected].sort(() => Math.random() - 0.5).slice(0, n);
+   if (selected.length < n) {
+    const used = new Set(selected.map(q => q.id));
+    const extra = pool.filter(q => !used.has(q.id)).sort(() => Math.random() - 0.5);
+    selected.push(...extra.slice(0, n - selected.length));
+   }
+   setExamQs(selected.slice(0, n));
+   setAnswers({});
+   setFlagged(new Set());
+   setCurrentQ(0);
+   setTimeLeft(n <= 50 ? 4500 : 9000);
+   setPhase('exam');
+  };
+
+  const endExam = useCallback((qs, ans) => {
+   clearInterval(timerRef.current);
+   const srs = getSRS();
+   (qs || examQs).forEach((q, idx) => {
+    const chosen = (ans || answers)[idx];
+    srs[q.id] = sm2Update(srs[q.id], chosen !== undefined && chosen === q.correct ? 5 : 0);
+   });
+   saveSRS(srs);
+   setPhase('results');
+  }, [examQs, answers]);
+
+  useEffect(() => {
+   if (phase !== 'exam') { clearInterval(timerRef.current); return; }
+   timerRef.current = setInterval(() => {
+    setTimeLeft(t => {
+     if (t <= 1) { endExam(); return 0; }
+     return t - 1;
+    });
+   }, 1000);
+   return () => clearInterval(timerRef.current);
+  }, [phase, endExam]);
+
+  // ── Setup Phase ──
+  if (phase === 'setup') {
+   const avail = allQsRich.filter(q => filteredSubjs.has(q.subjectId)).length;
+   return (
+    <div style={css.container}>
+     <BackToMainButton label="Back to Home" />
+     <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", marginBottom: 36 }}>
+       <div style={{ fontSize: 52, marginBottom: 12 }}>🎯</div>
+       <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 32, margin: "0 0 8px", color: theme.text }}>Full Mock Examination</h1>
+       <p style={{ fontSize: 15, color: theme.textMuted, margin: 0 }}>Simulate the DG Shipping 2nd Mate CoC written examination</p>
+      </div>
+
+      <div style={{ ...css.card, padding: 28, marginBottom: 20 }}>
+       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: theme.text }}>Select subjects</div>
+       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {SUBJECTS.map(s => {
+         const sel = filteredSubjs.has(s.id);
+         const cnt = allQsRich.filter(q => q.subjectId === s.id).length;
+         return (
+          <button key={s.id}
+           onClick={() => setFilteredSubjs(prev => { const next = new Set(prev); sel ? next.delete(s.id) : next.add(s.id); return next; })}
+           style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 20,
+            border: `1.5px solid ${sel ? s.color : theme.border}`,
+            background: sel ? s.color + "18" : theme.surfaceAlt,
+            color: sel ? s.color : theme.textMuted, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.15s"
+           }}>
+           {s.icon} {s.name} <span style={{ opacity: 0.65, fontSize: 11 }}>({cnt}Q)</span>
+          </button>
+         );
+        })}
+       </div>
+      </div>
+
+      <div style={{ ...css.card, padding: 28, marginBottom: 20 }}>
+       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: theme.text }}>Number of questions</div>
+       <div style={{ display: "flex", gap: 10 }}>
+        {[25, 50, 100].map(n => {
+         const actual = Math.min(n, avail);
+         return (
+          <button key={n} onClick={() => setNumQs(n)}
+           style={{ flex: 1, padding: "14px 8px", borderRadius: 12,
+            border: `2px solid ${numQs === n ? theme.accent : theme.border}`,
+            background: numQs === n ? theme.accentLight : theme.surfaceAlt,
+            color: numQs === n ? theme.accent : theme.textMuted,
+            fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+           {n}Q
+           <div style={{ fontSize: 11, fontWeight: 400, marginTop: 4, color: theme.textMuted }}>
+            {n <= 25 ? "30 min" : n <= 50 ? "75 min" : "150 min"}
+           </div>
+          </button>
+         );
+        })}
+       </div>
+       <div style={{ marginTop: 12, fontSize: 13, color: theme.textMuted, textAlign: "center" }}>
+        Available: {avail} questions · Exam will use {Math.min(numQs, avail)}
+       </div>
+      </div>
+
+      <div style={{ padding: "16px 20px", background: theme.accentLight, borderRadius: 12, border: `1px solid ${theme.accent}30`, marginBottom: 28, fontSize: 13, color: theme.text, lineHeight: 1.75 }}>
+       <strong style={{ color: theme.accent }}>Exam rules: </strong>
+       No hints during exam · Proportional sampling by subject · Pass mark <strong>60%</strong> · Timer auto-submits · SRS records updated on completion
+      </div>
+
+      <button onClick={buildExam} disabled={avail === 0 || filteredSubjs.size === 0}
+       style={{ ...css.btn("primary"), width: "100%", padding: "16px", fontSize: 16, fontWeight: 700, opacity: avail === 0 ? 0.5 : 1 }}>
+       🚀 Start Examination
+      </button>
+     </div>
+    </div>
+   );
+  }
+
+  // ── Results Phase ──
+  if (phase === 'results') {
+   const total = examQs.length;
+   const attempted = Object.keys(answers).length;
+   const correct = examQs.reduce((acc, q, i) => acc + (answers[i] === q.correct ? 1 : 0), 0);
+   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+   const passed = pct >= 60;
+   const subjBreakdown = SUBJECTS.map(s => {
+    const qs = examQs.filter(q => q.subjectId === s.id);
+    if (!qs.length) return null;
+    const c = qs.reduce((a, q) => a + (answers[examQs.indexOf(q)] === q.correct ? 1 : 0), 0);
+    return { ...s, total: qs.length, correct: c, pct: Math.round((c / qs.length) * 100) };
+   }).filter(Boolean);
+   const wrongQs = examQs.map((q, i) => ({ ...q, idx: i, chosen: answers[i] })).filter(q => q.chosen !== q.correct);
+
+   return (
+    <div style={css.container}>
+     <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", padding: "36px 20px 28px" }}>
+       <div style={{ fontSize: 56, marginBottom: 14 }}>{passed ? "🎉" : "📖"}</div>
+       <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 34, margin: "0 0 6px", color: passed ? theme.success : theme.danger }}>
+        {passed ? "Examination Passed!" : "Not Passed This Time"}
+       </h1>
+       <div style={{ fontSize: 54, fontWeight: 900, fontFamily: "'JetBrains Mono', monospace", color: passed ? theme.success : theme.danger, margin: "14px 0 6px" }}>{pct}%</div>
+       <div style={{ fontSize: 15, color: theme.textMuted }}>{correct}/{total} correct · {attempted} attempted · Pass mark: 60%</div>
+      </div>
+
+      <div style={{ ...css.card, padding: 28, marginBottom: 20 }}>
+       <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: theme.text }}>Subject breakdown</div>
+       {subjBreakdown.map(s => (
+        <div key={s.id} style={{ marginBottom: 18 }}>
+         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
+          <span style={{ fontWeight: 600, color: theme.text }}>{s.icon} {s.name}</span>
+          <span style={{ fontWeight: 700, color: s.pct >= 60 ? theme.success : theme.danger }}>{s.correct}/{s.total} ({s.pct}%)</span>
+         </div>
+         <ProgressBar value={s.correct} max={s.total} height={6} color={s.pct >= 60 ? theme.success : theme.danger} />
+        </div>
+       ))}
+      </div>
+
+      {wrongQs.length > 0 && (
+       <div style={{ ...css.card, padding: 28, marginBottom: 20 }}>
+        <button onClick={() => setReviewMode(r => !r)}
+         style={{ ...css.btn(), width: "100%", textAlign: "left", fontWeight: 700, fontSize: 14 }}>
+         {reviewMode ? "▲" : "▼"} Review wrong answers ({wrongQs.length})
+        </button>
+        {reviewMode && (
+         <div style={{ marginTop: 20 }}>
+          {wrongQs.map((q, ri) => (
+           <div key={ri} style={{ padding: "14px 18px", marginBottom: 10, borderRadius: 10,
+            background: darkMode ? "rgba(232,88,88,0.06)" : "#FEF2F2",
+            border: `1px solid ${theme.danger}30` }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: theme.text }}>Q{q.idx + 1}: {q.q}</div>
+            <div style={{ fontSize: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+             {q.chosen !== undefined
+              ? <span style={{ color: theme.danger }}>✗ Your answer: {q.options[q.chosen]}</span>
+              : <span style={{ color: theme.textMuted }}>— Not attempted</span>}
+             <span style={{ color: theme.success }}>✓ Correct: {q.options[q.correct]}</span>
+             {q.explanation && <span style={{ color: theme.textMuted, fontStyle: "italic", marginTop: 4 }}>{q.explanation}</span>}
+            </div>
+            <div style={{ fontSize: 11, marginTop: 6, color: theme.textMuted, fontWeight: 500 }}>
+             {q.subjectIcon} {q.subjectName} › {q.topicName}
+            </div>
+           </div>
+          ))}
+         </div>
+        )}
+       </div>
+      )}
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+       <button style={{ ...css.btn("primary"), flex: 1 }} onClick={() => navigate("home")}>Back to home</button>
+       <button style={{ ...css.btn(), flex: 1 }} onClick={() => { setPhase('setup'); setReviewMode(false); }}>New examination</button>
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  // ── Exam Phase ──
+  const q = examQs[currentQ];
+  const answeredCount = Object.keys(answers).length;
+  const isLast = currentQ === examQs.length - 1;
+  const timerPct = timeLeft / (examQs.length <= 50 ? 4500 : 9000);
+  const timerColor = timerPct < 0.1 ? theme.danger : timerPct < 0.25 ? theme.warning : theme.success;
+
+  return (
+   <div style={{ minHeight: "100vh", background: theme.bg }}>
+    {/* Sticky exam header */}
+    <div style={{ position: "sticky", top: 0, zIndex: 100, background: theme.surface, borderBottom: `1px solid ${theme.border}`, padding: "10px 20px" }}>
+     <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 16, fontWeight: 800, color: timerColor, minWidth: 90 }}>⏱ {fmt(timeLeft)}</div>
+      <div style={{ flex: 1, minWidth: 120 }}>
+       <ProgressBar value={answeredCount} max={examQs.length} height={4} color={theme.accent} />
+       <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 3 }}>{answeredCount}/{examQs.length} answered</div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+       <button onClick={() => setShowNavPanel(s => !s)} style={{ ...css.btn(), fontSize: 12, padding: "5px 12px" }}>☰ Questions</button>
+       <button onClick={() => { if (window.confirm("Submit exam now? You cannot change answers after submission.")) endExam(examQs, answers); }}
+        style={{ ...css.btn("primary"), fontSize: 12, padding: "5px 14px" }}>Submit ✓</button>
+      </div>
+     </div>
+    </div>
+
+    {/* Side navigation panel */}
+    {showNavPanel && (
+     <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex" }}>
+      <div onClick={() => setShowNavPanel(false)} style={{ flex: 1, background: "rgba(0,0,0,0.4)" }} />
+      <div style={{ width: 300, height: "100vh", background: theme.surface, borderLeft: `1px solid ${theme.border}`, padding: 24, overflowY: "auto" }}>
+       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16, color: theme.text }}>Question Navigator</div>
+       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginBottom: 20 }}>
+        {examQs.map((_, i) => {
+         const isAns = answers[i] !== undefined;
+         const isFlag = flagged.has(i);
+         const isCur = i === currentQ;
+         let bg = theme.surfaceAlt, col = theme.textMuted, bdr = theme.border;
+         if (isCur) { bg = theme.accent; col = "#fff"; bdr = theme.accent; }
+         else if (isAns && isFlag) { bg = theme.warning + "28"; col = theme.warning; bdr = theme.warning + "80"; }
+         else if (isAns) { bg = theme.success + "16"; col = theme.success; bdr = theme.success + "50"; }
+         else if (isFlag) { bg = theme.warning + "14"; col = theme.warning; bdr = theme.warning + "40"; }
+         return (
+          <button key={i} onClick={() => { setCurrentQ(i); setShowNavPanel(false); }}
+           style={{ height: 36, borderRadius: 8, border: `1.5px solid ${bdr}`, background: bg, color: col, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+           {i + 1}
+          </button>
+         );
+        })}
+       </div>
+       <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.8 }}>
+        <div>🟢 Answered · 🚩 Flagged · ⬜ Unattempted</div>
+        <div>{answeredCount} answered · {examQs.filter((_, i) => flagged.has(i)).length} flagged</div>
+       </div>
+      </div>
+     </div>
+    )}
+
+    {/* Question area */}
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "28px 20px" }}>
+     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: theme.textMuted }}>
+       Q{currentQ + 1}/{examQs.length}
+       {q && <span style={{ marginLeft: 10, padding: "2px 10px", borderRadius: 10, background: q.subjectColor + "18", color: q.subjectColor, fontSize: 11, fontWeight: 700 }}>{q.subjectIcon} {q.subjectName}</span>}
+      </div>
+      <button onClick={() => setFlagged(s => { const n = new Set(s); n.has(currentQ) ? n.delete(currentQ) : n.add(currentQ); return n; })}
+       style={{ ...css.btn(), padding: "5px 13px", fontSize: 12,
+        color: flagged.has(currentQ) ? theme.warning : theme.textMuted,
+        borderColor: flagged.has(currentQ) ? theme.warning : theme.border }}>
+       {flagged.has(currentQ) ? "🚩 Flagged" : "⚑ Flag"}
+      </button>
+     </div>
+
+     <div style={{ ...css.card, padding: "26px 28px 20px", marginBottom: 18 }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:6, marginBottom:22 }}>
+       <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.7, margin: 0, color: theme.text, flex:1 }}>{q?.q}</p>
+       <SpeakBtn text={q?.q || ''} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+       {q?.options.map((opt, i) => {
+        const isSel = answers[currentQ] === i;
+        return (
+         <div key={i} onClick={() => setAnswers(a => ({ ...a, [currentQ]: i }))}
+          style={{ padding: "13px 18px", borderRadius: 10, cursor: "pointer",
+           border: `1.5px solid ${isSel ? theme.accent : theme.border}`,
+           background: isSel ? theme.accentLight : theme.surfaceAlt, transition: "all 0.15s",
+           display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+           border: `2px solid ${isSel ? theme.accent : theme.border}`,
+           background: isSel ? theme.accent : "transparent",
+           display: "flex", alignItems: "center", justifyContent: "center",
+           color: isSel ? "#fff" : theme.textMuted, fontSize: 12, fontWeight: 700 }}>
+           {String.fromCharCode(65 + i)}
+          </div>
+          <span style={{ fontSize: 14, color: theme.text, fontWeight: isSel ? 500 : 400 }}>{opt}</span>
+         </div>
+        );
+       })}
+      </div>
+     </div>
+
+     <div style={{ display: "flex", gap: 12 }}>
+      <button style={{ ...css.btn(), flex: 1 }} disabled={currentQ === 0} onClick={() => setCurrentQ(c => c - 1)}>← Prev</button>
+      <button style={{ ...css.btn("primary"), flex: 2 }} onClick={() => {
+       if (isLast) { if (window.confirm("Submit exam? You cannot change answers after submission.")) endExam(examQs, answers); }
+       else setCurrentQ(c => c + 1);
+      }}>
+       {isLast ? "Submit Exam ✓" : "Next →"}
+      </button>
+     </div>
+    </div>
+   </div>
+  );
+ };
+
+ // ═══════════════════════════════════════════════
+ // PAGE: SRS REVIEW
+ // ═══════════════════════════════════════════════
+ const SRSReviewPage = () => {
+  const allQsRich = getAllMCQsRich();
+  const [srsData, setSrsData] = useState(getSRS);
+  const now = Date.now();
+  const dueAll = allQsRich.filter(q => { const c = srsData[q.id]; return !c || c.dueDate <= now; });
+  const [queue] = useState(() => [...dueAll].sort(() => Math.random() - 0.5).slice(0, 50));
+  const [current, setCurrent] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [stats, setStats] = useState({ correct: 0, wrong: 0 });
+  const [done, setDone] = useState(false);
+
+  const rateAnswer = (quality) => {
+   const q = queue[current];
+   const newCard = sm2Update(srsData[q.id], quality);
+   const newSrs = { ...srsData, [q.id]: newCard };
+   setSrsData(newSrs);
+   saveSRS(newSrs);
+   setStats(s => ({ correct: quality >= 3 ? s.correct + 1 : s.correct, wrong: quality < 3 ? s.wrong + 1 : s.wrong }));
+   if (current >= queue.length - 1) setDone(true);
+   else { setCurrent(c => c + 1); setRevealed(false); }
+  };
+
+  if (queue.length === 0) {
+   return (
+    <div style={css.container}>
+     <BackToMainButton label="Back to Home" />
+     <div style={{ textAlign: "center", padding: "64px 20px", maxWidth: 500, margin: "0 auto" }}>
+      <div style={{ fontSize: 60, marginBottom: 20 }}>🎉</div>
+      <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, marginBottom: 12, color: theme.text }}>All caught up!</h2>
+      <p style={{ color: theme.textMuted, fontSize: 15, lineHeight: 1.7 }}>No cards are due for review right now. Complete more MCQ quizzes or mock exams to build your review queue, then come back tomorrow.</p>
+      <button style={{ ...css.btn("primary"), marginTop: 24, padding: "12px 28px" }} onClick={() => navigate("home")}>Back to home</button>
+     </div>
+    </div>
+   );
+  }
+
+  if (done) {
+   const accuracy = queue.length > 0 ? Math.round((stats.correct / queue.length) * 100) : 0;
+   return (
+    <div style={css.container}>
+     <div style={{ textAlign: "center", padding: "56px 20px", maxWidth: 500, margin: "0 auto" }}>
+      <div style={{ fontSize: 56, marginBottom: 16 }}>{stats.wrong === 0 ? "⭐" : accuracy >= 70 ? "💪" : "📖"}</div>
+      <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, marginBottom: 12, color: theme.text }}>Session complete!</h2>
+      <div style={{ ...css.card, padding: "28px", marginBottom: 28, textAlign: "center" }}>
+       <div style={{ fontSize: 42, fontWeight: 900, fontFamily: "'JetBrains Mono', monospace", color: theme.text, marginBottom: 8 }}>{accuracy}%</div>
+       <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 16 }}>{queue.length} cards reviewed</div>
+       <div style={{ display: "flex", gap: 20, justifyContent: "center", fontSize: 13 }}>
+        <span style={{ color: theme.success }}>✓ {stats.correct} correct</span>
+        <span style={{ color: theme.danger }}>✗ {stats.wrong} forgot</span>
+       </div>
+      </div>
+      <div style={{ display: "flex", gap: 12 }}>
+       <button style={{ ...css.btn("primary"), flex: 1 }} onClick={() => navigate("home")}>Home</button>
+       <button style={{ ...css.btn(), flex: 1 }} onClick={() => { setCurrent(0); setRevealed(false); setDone(false); setStats({ correct: 0, wrong: 0 }); }}>Review again</button>
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  const q = queue[current];
+  const card = srsData[q.id];
+  const nextInterval = card ? Math.max(1, Math.round(card.interval * card.easeFactor)) : 1;
+
+  return (
+   <div style={css.container}>
+    <div style={{ maxWidth: 640, margin: "0 auto" }}>
+     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      <div>
+       <div style={{ fontSize: 14, fontWeight: 700, color: theme.text }}>🧠 Spaced Repetition Review</div>
+       <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>Card {current + 1} of {queue.length} · {queue.length - current - 1} remaining</div>
+      </div>
+      <button style={{ ...css.btn(), padding: "6px 14px", fontSize: 12 }} onClick={() => navigate("home")}>✕ Exit</button>
+     </div>
+
+     <ProgressBar value={current} max={queue.length} height={3} color={theme.accent} />
+
+     <div style={{ marginTop: 22, ...css.card, padding: "30px 28px" }}>
+      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+       <span style={{ padding: "3px 12px", borderRadius: 10, background: q.subjectColor + "18", color: q.subjectColor, fontSize: 11, fontWeight: 700 }}>
+        {q.subjectIcon} {q.subjectName}
+       </span>
+       <span style={{ fontSize: 11, color: theme.textMuted }}>{q.topicName}</span>
+       {card && <span style={{ fontSize: 11, color: theme.textMuted, marginLeft: "auto" }}>Interval: {card.interval}d · EF: {card.easeFactor.toFixed(1)}</span>}
+      </div>
+
+      <div style={{ display:'flex', alignItems:'flex-start', gap:6, marginBottom:24 }}>
+       <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.7, margin: 0, color: theme.text, flex:1 }}>{q.q}</p>
+       <SpeakBtn text={q.q} />
+      </div>
+
+      {!revealed ? (
+       <button style={{ ...css.btn("primary"), width: "100%", padding: "14px", fontSize: 14 }} onClick={() => setRevealed(true)}>
+        Show Answer
+       </button>
+      ) : (
+       <>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
+         {q.options.map((opt, i) => (
+          <div key={i} style={{ padding: "11px 16px", borderRadius: 10,
+           border: `1.5px solid ${i === q.correct ? theme.success : theme.border}`,
+           background: i === q.correct ? (darkMode ? "rgba(29,184,124,0.10)" : "#ECFDF5") : theme.surfaceAlt,
+           color: i === q.correct ? theme.success : theme.textMuted,
+           fontSize: 14, display: "flex", alignItems: "center", gap: 10 }}>
+           <span style={{ fontWeight: 700, minWidth: 18 }}>{i === q.correct ? "✓" : String.fromCharCode(65 + i)}</span>
+           {opt}
+          </div>
+         ))}
+        </div>
+
+        {q.explanation && (
+         <div style={{ padding: "12px 16px", background: theme.accentLight, borderRadius: 10, fontSize: 13, color: theme.text, lineHeight: 1.65, marginBottom: 20, border: `1px solid ${theme.accent}25` }}>
+          <strong style={{ color: theme.accent }}>Explanation: </strong>{q.explanation}
+         </div>
+        )}
+
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: theme.text, textAlign: "center" }}>How well did you recall this?</div>
+        <div style={{ display: "flex", gap: 10 }}>
+         <button onClick={() => rateAnswer(0)} style={{ flex: 1, padding: "12px 6px", borderRadius: 10, border: `1.5px solid ${theme.danger}`, background: theme.danger + "14", color: theme.danger, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          ✗ Forgot
+          <div style={{ fontSize: 10, fontWeight: 400, marginTop: 3, opacity: 0.85 }}>Again tomorrow</div>
+         </button>
+         <button onClick={() => rateAnswer(3)} style={{ flex: 1, padding: "12px 6px", borderRadius: 10, border: `1.5px solid ${theme.warning}`, background: theme.warning + "14", color: theme.warning, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          △ Hesitant
+          <div style={{ fontSize: 10, fontWeight: 400, marginTop: 3, opacity: 0.85 }}>In 3 days</div>
+         </button>
+         <button onClick={() => rateAnswer(5)} style={{ flex: 1, padding: "12px 6px", borderRadius: 10, border: `1.5px solid ${theme.success}`, background: theme.success + "14", color: theme.success, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          ✓ Got it!
+          <div style={{ fontSize: 10, fontWeight: 400, marginTop: 3, opacity: 0.85 }}>In {nextInterval}d</div>
+         </button>
+        </div>
+       </>
+      )}
+     </div>
+    </div>
+   </div>
+  );
+ };
+
+ // ═══════════════════════════════════════════════
+ // PAGE: FLASHCARD DECKS
+ // ═══════════════════════════════════════════════
+ const FlashcardDecksPage = () => {
+  const [fcProgress, setFcProgress] = useState(getFCProgress);
+  const [activeDeck, setActiveDeck] = useState(null);    // deck object
+  const [deckMode, setDeckMode] = useState('all');       // 'all' | 'review'
+  const [cardIdx, setCardIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const [sessionKnown, setSessionKnown] = useState(new Set());
+  const [sessionDone, setSessionDone] = useState(false);
+
+  // All decks (dedicated + MCQ-based per subject)
+  const mcqDecks = SUBJECTS.map(subj => {
+   const allQs = subj.modules.flatMap(m => m.topics.flatMap(t =>
+    (t.mcqs || []).map((q, idx) => ({
+     id: `${t.id}_q${idx}`,
+     front: q.q,
+     back: (q.options[q.correct !== undefined ? q.correct : q.answer] || '') +
+           (q.explanation ? `\n\n${q.explanation}` : ''),
+    }))
+   ));
+   return allQs.length === 0 ? null : {
+    id: `mcq_${subj.id}`, subjectId: subj.id,
+    name: `${subj.name} — MCQ Cards`,
+    icon: subj.icon, color: subj.color,
+    isMCQ: true, cards: allQs,
+   };
+  }).filter(Boolean);
+
+  const allDecks = [...FLASHCARD_DECKS, ...mcqDecks];
+
+  const getDeckKnown = (deckId) => (fcProgress[deckId]?.known || []);
+
+  const startDeck = (deck, mode = 'all') => {
+   const known = new Set(getDeckKnown(deck.id));
+   const cards = mode === 'review'
+    ? deck.cards.filter(c => !known.has(c.id))
+    : [...deck.cards].sort(() => Math.random() - 0.5);
+   if (!cards.length) { alert('No cards to review! Reset the deck to study all cards again.'); return; }
+   setActiveDeck({ ...deck, sessionCards: cards });
+   setDeckMode(mode);
+   setCardIdx(0);
+   setFlipped(false);
+   setSessionKnown(new Set());
+   setSessionDone(false);
+  };
+
+  const markKnown = () => {
+   const card = activeDeck.sessionCards[cardIdx];
+   const newKnown = new Set(sessionKnown);
+   newKnown.add(card.id);
+   setSessionKnown(newKnown);
+   // Persist
+   const allKnown = new Set([...getDeckKnown(activeDeck.id), card.id]);
+   const newProg = { ...fcProgress, [activeDeck.id]: { known: [...allKnown], lastStudied: Date.now() } };
+   setFcProgress(newProg);
+   saveFCProgress(newProg);
+   advanceCard();
+  };
+
+  const markReview = () => {
+   // Remove from known (needs more work)
+   const card = activeDeck.sessionCards[cardIdx];
+   const known = getDeckKnown(activeDeck.id).filter(id => id !== card.id);
+   const newProg = { ...fcProgress, [activeDeck.id]: { known, lastStudied: Date.now() } };
+   setFcProgress(newProg);
+   saveFCProgress(newProg);
+   advanceCard();
+  };
+
+  const advanceCard = () => {
+   if (cardIdx >= activeDeck.sessionCards.length - 1) { setSessionDone(true); return; }
+   setCardIdx(i => i + 1);
+   setFlipped(false);
+  };
+
+  const resetDeck = (deckId) => {
+   const newProg = { ...fcProgress, [deckId]: { known: [], lastStudied: Date.now() } };
+   setFcProgress(newProg);
+   saveFCProgress(newProg);
+  };
+
+  // ── Render card back text with basic markdown ──
+  const renderBack = (text) => {
+   return text.split('\n').map((line, i) => {
+    // Bold: **text**
+    const parts = line.split(/\*\*(.*?)\*\*/g);
+    return (
+     <span key={i} style={{ display: 'block', lineHeight: 1.7,
+      marginBottom: line === '' ? 6 : 0 }}>
+      {parts.map((p, j) => j % 2 === 1
+       ? <strong key={j}>{p}</strong>
+       : <span key={j}>{p}</span>
+      )}
+     </span>
+    );
+   });
+  };
+
+  // ── Session results ──
+  if (activeDeck && sessionDone) {
+   const total = activeDeck.sessionCards.length;
+   const knownCount = sessionKnown.size;
+   const allKnown = getDeckKnown(activeDeck.id).length;
+   return (
+    <div style={css.container}>
+     <div style={{ maxWidth: 580, margin: "0 auto", textAlign: "center", padding: "40px 20px" }}>
+      <div style={{ fontSize: 54, marginBottom: 16 }}>{knownCount === total ? "🌟" : knownCount >= total * 0.7 ? "💪" : "📖"}</div>
+      <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, margin: "0 0 8px", color: theme.text }}>Session Complete</h2>
+      <div style={{ fontSize: 42, fontWeight: 900, fontFamily: "'JetBrains Mono', monospace",
+       color: knownCount >= total * 0.7 ? theme.success : theme.warning,
+       margin: "12px 0 6px" }}>{knownCount}/{total}</div>
+      <div style={{ color: theme.textMuted, fontSize: 14, marginBottom: 8 }}>Marked as known this session</div>
+      <div style={{ fontSize: 13, color: theme.textMuted, marginBottom: 32 }}>
+       {allKnown}/{activeDeck.cards.length} total known in this deck
+      </div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+       <button style={{ ...css.btn("primary"), flex: 1 }}
+        onClick={() => startDeck(activeDeck, 'review')}>Review remaining</button>
+       <button style={{ ...css.btn(), flex: 1 }}
+        onClick={() => { setActiveDeck(null); setSessionDone(false); }}>All decks</button>
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  // ── Study mode ──
+  if (activeDeck) {
+   const card = activeDeck.sessionCards[cardIdx];
+   const total = activeDeck.sessionCards.length;
+   const isKnown = sessionKnown.has(card.id);
+   const subj = SUBJECTS.find(s => s.id === activeDeck.subjectId);
+   const accentColor = subj?.color || activeDeck.color || theme.accent;
+
+   return (
+    <div style={css.container}>
+     <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+       <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.text }}>{activeDeck.icon} {activeDeck.name}</div>
+        <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2 }}>
+         Card {cardIdx + 1} of {total} · {sessionKnown.size} known this session
+        </div>
+       </div>
+       <button style={{ ...css.btn(), padding: "6px 14px", fontSize: 12 }}
+        onClick={() => { setActiveDeck(null); }}>✕ Exit</button>
+      </div>
+      <ProgressBar value={cardIdx} max={total} height={3} color={accentColor} />
+
+      {/* Flip card */}
+      <div style={{ marginTop: 20, perspective: "1200px", cursor: "pointer" }} onClick={() => setFlipped(f => !f)}>
+       <div style={{
+        position: "relative", width: "100%", minHeight: 320,
+        transformStyle: "preserve-3d",
+        transition: "transform 0.48s cubic-bezier(0.45, 0, 0.55, 1)",
+        transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+       }}>
+        {/* FRONT */}
+        <div style={{
+         position: "absolute", inset: 0, minHeight: 320,
+         backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
+         ...css.card, padding: "36px 32px",
+         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+         borderTop: `4px solid ${accentColor}`,
+        }}>
+         <div style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: 1,
+          textTransform: "uppercase", marginBottom: 20 }}>— FRONT —</div>
+         <p style={{ fontSize: 22, fontWeight: 700, textAlign: "center", lineHeight: 1.5,
+          margin: 0, color: theme.text, fontFamily: "'Playfair Display', serif" }}>
+          {card.front}
+         </p>
+         <div style={{ marginTop: 28, fontSize: 12, color: theme.textMuted }}>
+          Tap to reveal answer ↓
+         </div>
+        </div>
+
+        {/* BACK */}
+        <div style={{
+         position: "absolute", inset: 0, minHeight: 320,
+         backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden",
+         transform: "rotateY(180deg)",
+         ...css.card, padding: "28px 32px",
+         display: "flex", flexDirection: "column",
+         borderTop: `4px solid ${accentColor}`,
+         overflowY: "auto",
+        }}>
+         <div style={{ fontSize: 11, fontWeight: 700, color: accentColor, letterSpacing: 1,
+          textTransform: "uppercase", marginBottom: 14 }}>— BACK —</div>
+         <div style={{ fontSize: 14, color: theme.text, lineHeight: 1.7, flex: 1 }}>
+          {renderBack(card.back)}
+         </div>
+        </div>
+       </div>
+      </div>
+
+      {/* Action buttons — only show when flipped */}
+      <div style={{ marginTop: 16, display: "flex", gap: 12, opacity: flipped ? 1 : 0,
+       pointerEvents: flipped ? "auto" : "none", transition: "opacity 0.25s" }}>
+       <button onClick={(e) => { e.stopPropagation(); markReview(); }}
+        style={{ flex: 1, padding: "14px 10px", borderRadius: 12, border: `1.5px solid ${theme.danger}`,
+         background: theme.danger + "14", color: theme.danger, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+        🔁 Review again
+       </button>
+       <button onClick={(e) => { e.stopPropagation(); markKnown(); }}
+        style={{ flex: 1, padding: "14px 10px", borderRadius: 12, border: `1.5px solid ${theme.success}`,
+         background: theme.success + "14", color: theme.success, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+        ✓ Got it!
+       </button>
+      </div>
+
+      {/* Skip button */}
+      <div style={{ textAlign: "center", marginTop: 12 }}>
+       <button onClick={() => { setFlipped(false); advanceCard(); }}
+        style={{ background: "none", border: "none", color: theme.textMuted, fontSize: 12,
+         cursor: "pointer", padding: "6px 12px" }}>
+        Skip →
+       </button>
+      </div>
+
+      {/* Keyboard hint */}
+      <div style={{ textAlign: "center", marginTop: 6, fontSize: 11, color: theme.textMuted, opacity: 0.6 }}>
+       Space to flip · ← → to skip · K = Known · R = Review
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  // ── Deck list ──
+  const subjGroups = {};
+  allDecks.forEach(d => { (subjGroups[d.subjectId] = subjGroups[d.subjectId] || []).push(d); });
+
+  return (
+   <div style={css.container}>
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
+     <BackToMainButton label="Back to Home" />
+     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
+      <div>
+       <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, margin: "0 0 6px", color: theme.text }}>
+        🃏 Flashcard Decks
+       </h1>
+       <div style={{ fontSize: 14, color: theme.textMuted }}>
+        {allDecks.reduce((a, d) => a + d.cards.length, 0)} cards across {allDecks.length} decks
+       </div>
+      </div>
+     </div>
+
+     {Object.entries(subjGroups).map(([subjId, decks]) => {
+      const subj = SUBJECTS.find(s => s.id === subjId);
+      return (
+       <div key={subjId} style={{ marginBottom: 32 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+         <span style={{ fontSize: 20 }}>{subj?.icon}</span>
+         <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: theme.text }}>{subj?.name}</h2>
+         <div style={{ flex: 1, height: 1, background: theme.border, marginLeft: 8 }} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+         {decks.map(deck => {
+          const known = getDeckKnown(deck.id);
+          const knownPct = deck.cards.length > 0 ? Math.round((known.length / deck.cards.length) * 100) : 0;
+          const reviewLeft = deck.cards.length - known.length;
+          const color = deck.color || (subj?.color) || theme.accent;
+          return (
+           <div key={deck.id} style={{ ...css.card, padding: 0, overflow: "hidden" }}>
+            <div style={{ height: 3, background: `linear-gradient(90deg, ${color}, ${color}60)` }} />
+            <div style={{ padding: "20px 20px 14px" }}>
+             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 20 }}>{deck.icon}</span>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.text, lineHeight: 1.3 }}>{deck.name}</div>
+             </div>
+             <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>
+              {deck.cards.length} cards · {known.length} known
+             </div>
+             <ProgressBar value={known.length} max={deck.cards.length} height={5} color={color} />
+             <div style={{ fontSize: 11, color: theme.textMuted, marginTop: 6 }}>{knownPct}% mastered</div>
+            </div>
+            <div style={{ padding: "10px 20px 16px", display: "flex", gap: 8 }}>
+             <button onClick={() => startDeck(deck, 'all')}
+              style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: `1.5px solid ${color}`,
+               background: color + "18", color: color, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              Study all
+             </button>
+             {reviewLeft > 0 && (
+              <button onClick={() => startDeck(deck, 'review')}
+               style={{ flex: 1, padding: "9px 8px", borderRadius: 10, border: `1.5px solid ${theme.border}`,
+                background: theme.surfaceAlt, color: theme.textMuted, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
+               Review ({reviewLeft})
+              </button>
+             )}
+             {known.length > 0 && (
+              <button onClick={() => resetDeck(deck.id)}
+               style={{ padding: "9px 10px", borderRadius: 10, border: `1px solid ${theme.border}`,
+                background: "transparent", color: theme.textMuted, fontSize: 11, cursor: "pointer" }}
+               title="Reset progress">↺</button>
+             )}
+            </div>
+           </div>
+          );
+         })}
+        </div>
+       </div>
+      );
+     })}
+    </div>
+   </div>
+  );
+ };
+
+ // ═══════════════════════════════════════════════
+ // PAGE: COLREGS LIGHTS QUIZ
+ // ═══════════════════════════════════════════════
+ const LightsQuizPage = () => {
+  const TOTAL = Math.min(20, LIGHTS_QUIZ.length);
+  const [shuffled] = useState(() => [...LIGHTS_QUIZ].sort(() => Math.random() - 0.5).slice(0, TOTAL));
+  const [qIdx, setQIdx] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [score, setScore] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [done, setDone] = useState(false);
+  const svgFilterId = useRef(`lgf_${Math.random().toString(36).substr(2,5)}`).current;
+
+  const q = shuffled[qIdx];
+
+  const submit = (i) => {
+   if (revealed) return;
+   setSelected(i);
+   setRevealed(true);
+   if (i === q.correct) setScore(s => s + 1);
+   setHistory(h => [...h, { q, chosen: i, correct: i === q.correct }]);
+  };
+
+  const next = () => {
+   if (qIdx >= shuffled.length - 1) setDone(true);
+   else { setQIdx(n => n + 1); setSelected(null); setRevealed(false); }
+  };
+
+  const restart = () => {
+   setQIdx(0); setSelected(null); setRevealed(false);
+   setScore(0); setHistory([]); setDone(false);
+  };
+
+  // ── Night SVG diagram renderer ──
+  const LightDiagram = ({ lights, aspect }) => {
+   const W = 220, H = 280;
+   // subtle star positions
+   const stars = [[28,18],[58,12],[92,28],[138,8],[172,22],[48,42],[182,38],[205,14],[14,52],[160,55],[70,62],[195,48]];
+   return (
+    <svg width={W} height={H} style={{ display: 'block', borderRadius: 14, flexShrink: 0 }}>
+     <defs>
+      <radialGradient id={`${svgFilterId}_bg`} cx="50%" cy="60%" r="80%">
+       <stop offset="0%" stopColor="#060D20"/>
+       <stop offset="100%" stopColor="#020710"/>
+      </radialGradient>
+      <filter id={`${svgFilterId}_glow`} x="-80%" y="-80%" width="260%" height="260%">
+       <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id={`${svgFilterId}_softglow`} x="-60%" y="-60%" width="220%" height="220%">
+       <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+     </defs>
+
+     {/* Sky background */}
+     <rect width={W} height={H} fill={`url(#${svgFilterId}_bg)`} rx="14"/>
+
+     {/* Stars */}
+     {stars.map(([sx, sy], i) => (
+      <circle key={i} cx={sx} cy={sy} r={0.85} fill="#FFFFFF" opacity={0.35 + (i % 3) * 0.15}/>
+     ))}
+
+     {/* Horizon line */}
+     <line x1="12" y1="196" x2={W-12} y2="196" stroke="rgba(70,110,170,0.22)" strokeWidth="1" strokeDasharray="6,5"/>
+
+     {/* Sea surface */}
+     <rect x="12" y="197" width={W-24} height={H-210} rx="3"
+      fill="rgba(10,25,65,0.35)"/>
+
+     {/* Lights — rendered with glow */}
+     {lights.map((l, i) => (
+      <g key={i}>
+       {/* Outer soft halo */}
+       <circle cx={l.x} cy={l.y} r={(l.r || 8) * 4.5} fill={l.color} opacity="0.06"/>
+       {/* Mid glow */}
+       <circle cx={l.x} cy={l.y} r={(l.r || 8) * 2.5} fill={l.color} opacity="0.14"/>
+       {/* Core with sharp glow filter */}
+       <g filter={`url(#${svgFilterId}_glow)`}>
+        <circle cx={l.x} cy={l.y} r={l.r || 8} fill={l.color} opacity="0.96"/>
+       </g>
+       {/* Specular highlight */}
+       <circle cx={l.x - (l.r || 8) * 0.28} cy={l.y - (l.r || 8) * 0.28} r={(l.r || 8) * 0.32} fill="#FFFFFF" opacity="0.55"/>
+      </g>
+     ))}
+
+     {/* Aspect label */}
+     <text x={W / 2} y={H - 8} textAnchor="middle"
+      fill="rgba(140,175,215,0.55)" fontSize="10.5"
+      fontFamily="'DM Sans', system-ui, sans-serif" fontWeight="500">
+      Seen from {aspect}
+     </text>
+    </svg>
+   );
+  };
+
+  // ── Results screen ──
+  if (done) {
+   const pct = Math.round((score / shuffled.length) * 100);
+   const wrong = history.filter(h => !h.correct);
+   return (
+    <div style={css.container}>
+     <div style={{ maxWidth: 680, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", padding: "36px 20px 28px" }}>
+       <div style={{ fontSize: 52 }}>{pct >= 80 ? "⭐" : pct >= 60 ? "💪" : "📖"}</div>
+       <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, margin: "14px 0 8px", color: theme.text }}>
+        COLREGS Lights Quiz — Complete
+       </h2>
+       <div style={{ fontSize: 44, fontWeight: 900, fontFamily: "'JetBrains Mono', monospace",
+        color: pct >= 60 ? theme.success : theme.danger, margin: "10px 0 4px" }}>{pct}%</div>
+       <div style={{ color: theme.textMuted, fontSize: 14 }}>{score} / {shuffled.length} correct</div>
+      </div>
+
+      {wrong.length > 0 && (
+       <div style={{ ...css.card, padding: 24, marginBottom: 24 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 18, color: theme.text }}>Review — incorrect answers</div>
+        {wrong.map((entry, i) => (
+         <div key={i} style={{ marginBottom: 16, padding: "14px 18px", borderRadius: 10,
+          background: darkMode ? "rgba(232,88,88,0.06)" : "#FEF2F2",
+          border: `1px solid ${theme.danger}30` }}>
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+           <div style={{ flexShrink: 0 }}>
+            <LightDiagram lights={entry.q.lights} aspect={entry.q.aspect} />
+           </div>
+           <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: theme.text }}>{entry.q.q}</div>
+            <div style={{ fontSize: 12, color: theme.danger, marginBottom: 3 }}>✗ You chose: {entry.q.options[entry.chosen]}</div>
+            <div style={{ fontSize: 12, color: theme.success, marginBottom: 8 }}>✓ Correct: {entry.q.options[entry.q.correct]}</div>
+            <div style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.6 }}>
+             <strong style={{ color: theme.accent }}>{entry.q.rule}: </strong>{entry.q.explanation}
+            </div>
+           </div>
+          </div>
+         </div>
+        ))}
+       </div>
+      )}
+
+      <div style={{ display: "flex", gap: 12 }}>
+       <button style={{ ...css.btn("primary"), flex: 1 }} onClick={restart}>Try again</button>
+       <button style={{ ...css.btn(), flex: 1 }} onClick={() => navigate("home")}>Home</button>
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  // ── Question screen ──
+  return (
+   <div style={css.container}>
+    <div style={{ maxWidth: 700, margin: "0 auto" }}>
+     <BackToMainButton label="Back to Home" />
+
+     {/* Header row */}
+     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+      <div>
+       <h2 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, margin: "0 0 3px", color: theme.text }}>
+        🚢 COLREGS Lights Quiz
+       </h2>
+       <div style={{ fontSize: 12, color: theme.textMuted }}>Question {qIdx + 1} of {shuffled.length}</div>
+      </div>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 20, fontWeight: 800,
+       color: theme.success, background: theme.surfaceAlt, padding: "6px 14px", borderRadius: 10,
+       border: `1px solid ${theme.border}` }}>
+       {score}/{qIdx}
+      </div>
+     </div>
+     <ProgressBar value={qIdx} max={shuffled.length} height={3} color={theme.accent} />
+
+     {/* Question card */}
+     <div style={{ ...css.card, marginTop: 20, padding: "26px 24px" }}>
+      {/* Diagram + question side by side */}
+      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", justifyContent: "center", marginBottom: 22 }}>
+
+       {/* SVG Night diagram */}
+       <div style={{ flexShrink: 0 }}>
+        <LightDiagram lights={q.lights} aspect={q.aspect} />
+       </div>
+
+       {/* Question + legend */}
+       <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div>
+         <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase",
+          letterSpacing: 0.9, marginBottom: 10 }}>{q.scenario}</div>
+         <div style={{ display:'flex', alignItems:'flex-start', gap:6, margin: "0 0 18px" }}>
+          <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.65, margin: 0, color: theme.text, flex:1 }}>{q.q}</p>
+          <SpeakBtn text={q.q} />
+         </div>
+        </div>
+
+        {/* Light colour legend */}
+        <div style={{ padding: "12px 14px", background: theme.surfaceAlt, borderRadius: 10,
+         border: `1px solid ${theme.border}` }}>
+         <div style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, marginBottom: 8 }}>Light colours</div>
+         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {[['#FFFFFF','White'], ['#FF2222','Red'], ['#00DD55','Green'], ['#FFDD00','Yellow']].map(([c, label]) => (
+           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: theme.textMuted }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: c,
+             boxShadow: `0 0 6px ${c}90, 0 0 2px ${c}` }}/>
+            {label}
+           </div>
+          ))}
+         </div>
+        </div>
+       </div>
+      </div>
+
+      {/* MCQ options */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+       {q.options.map((opt, i) => {
+        const isSel = selected === i;
+        const isRight = i === q.correct;
+        let bg = theme.surfaceAlt, bdr = theme.border, col = theme.text;
+        if (revealed) {
+         if (isRight)      { bg = darkMode ? "rgba(29,184,124,0.12)" : "#ECFDF5"; bdr = theme.success; col = theme.success; }
+         else if (isSel)   { bg = darkMode ? "rgba(232,88,88,0.10)" : "#FEF2F2"; bdr = theme.danger;  col = theme.danger; }
+        } else if (isSel)  { bg = theme.accentLight; bdr = theme.accent; }
+        return (
+         <div key={i} onClick={() => !revealed && submit(i)}
+          style={{ padding: "12px 18px", borderRadius: 10, cursor: revealed ? "default" : "pointer",
+           border: `1.5px solid ${bdr}`, background: bg, transition: "all 0.14s",
+           display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+           border: `2px solid ${revealed ? (isRight ? theme.success : isSel ? theme.danger : theme.border) : (isSel ? theme.accent : theme.border)}`,
+           background: revealed ? (isRight ? theme.success : isSel ? theme.danger : "transparent") : (isSel ? theme.accent : "transparent"),
+           display: "flex", alignItems: "center", justifyContent: "center",
+           color: "#fff", fontSize: 12, fontWeight: 700 }}>
+           {revealed ? (isRight ? "✓" : isSel ? "✗" : String.fromCharCode(65 + i)) : String.fromCharCode(65 + i)}
+          </div>
+          <span style={{ fontSize: 13.5, color: col, fontWeight: isRight && revealed ? 600 : 400, lineHeight: 1.45 }}>{opt}</span>
+         </div>
+        );
+       })}
+      </div>
+
+      {/* Explanation */}
+      {revealed && (
+       <div style={{ marginTop: 18, padding: "15px 18px", background: theme.accentLight, borderRadius: 10,
+        border: `1px solid ${theme.accent}30`, fontSize: 13, lineHeight: 1.7, color: theme.text }}>
+        <div style={{ fontWeight: 700, color: theme.accent, marginBottom: 4 }}>{q.rule}</div>
+        {q.explanation}
+       </div>
+      )}
+
+      {revealed && (
+       <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+        <button style={css.btn("primary")} onClick={next}>
+         {qIdx < shuffled.length - 1 ? "Next →" : "View results"}
+        </button>
+       </div>
+      )}
+     </div>
+    </div>
+   </div>
+  );
  };
 
  // ═══════════════════════════════════════════════
@@ -15144,7 +17369,10 @@ export default function App() {
  </div>
 
  <div style={{ ...css.card, padding: "28px 28px 20px" }}>
- <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.6, marginBottom: 24 }}>{q.q}</p>
+ <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 24 }}>
+  <p style={{ fontSize: 16, fontWeight: 500, lineHeight: 1.6, margin: 0, flex: 1 }}>{q.q}</p>
+  <SpeakBtn text={q.q} />
+ </div>
 
  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
  {q.options.map((opt, i) => {
@@ -15218,17 +17446,1246 @@ export default function App() {
  };
 
  // ═══════════════════════════════════════════════
+ // PAGE: PROGRESS DASHBOARD
+ // ═══════════════════════════════════════════════
+ const DashboardPage = () => {
+  const [perf, setPerf] = useState(() => getOralPerf());
+  const [plan, setPlan] = useState(() => getStudyPlan());
+  const [examDateInput, setExamDateInput] = useState(plan?.examDate || "");
+  const [planTab, setPlanTab] = useState("overview"); // "overview" | "plan" | "due"
+
+  const allIds = ORAL_SCENARIOS.map(s => s.id);
+  const attempted = allIds.filter(id => perf[id]?.lastSeen).length;
+  const totalCorrect = allIds.reduce((a, id) => a + (perf[id]?.correct || 0), 0);
+  const totalPartial = allIds.reduce((a, id) => a + (perf[id]?.partial || 0), 0);
+  const totalWrong = allIds.reduce((a, id) => a + (perf[id]?.wrong || 0), 0);
+  const totalAttempts = totalCorrect + totalPartial + totalWrong;
+  const correctRate = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+  const now = Date.now();
+  const dueQuestions = ORAL_SCENARIOS.filter(s => {
+   const p = perf[s.id];
+   return p?.lastSeen && (!p.nextReview || p.nextReview <= now);
+  });
+  const newQuestions = ORAL_SCENARIOS.filter(s => !perf[s.id]?.lastSeen);
+
+  // Per-category stats
+  const categories = [...new Set(ORAL_SCENARIOS.map(s => s.category))].sort();
+  const catStats = categories.map(cat => {
+   const qs = ORAL_SCENARIOS.filter(s => s.category === cat);
+   const att = qs.filter(s => perf[s.id]?.lastSeen).length;
+   const c = qs.reduce((a, s) => a + (perf[s.id]?.correct || 0), 0);
+   const p2 = qs.reduce((a, s) => a + (perf[s.id]?.partial || 0), 0);
+   const w = qs.reduce((a, s) => a + (perf[s.id]?.wrong || 0), 0);
+   const tot = c + p2 + w;
+   const rate = tot > 0 ? Math.round((c / tot) * 100) : null;
+   return { cat, total: qs.length, att, rate, correct: c, partial: p2, wrong: w };
+  });
+  const weakCats = catStats.filter(c => c.rate !== null).sort((a, b) => a.rate - b.rate).slice(0, 6);
+  const fnGroups = ["F1", "F2", "F3"].map(fn => {
+   const cs = catStats.filter(c => c.cat.startsWith(fn));
+   const att = cs.reduce((a, c) => a + c.att, 0);
+   const tot = cs.reduce((a, c) => a + c.total, 0);
+   const c = cs.reduce((a, c) => a + c.correct, 0);
+   const t = cs.reduce((a, c) => a + c.correct + c.partial + c.wrong, 0);
+   return { fn, att, tot, rate: t > 0 ? Math.round((c / t) * 100) : null };
+  });
+
+  const handleSavePlan = () => {
+   if (!examDateInput) return;
+   const newPlan = buildStudyPlan(examDateInput);
+   saveStudyPlan(newPlan);
+   setPlan(newPlan);
+  };
+
+  // Current week in plan
+  const currentWeek = plan ? Math.floor((now - plan.createdAt) / (7 * 86400000)) : 0;
+  const todayWeek = plan ? plan.schedule[Math.min(currentWeek, plan.schedule.length - 1)] : null;
+
+  const fnColor = { F1: "#185FA5", F2: "#8B5E3C", F3: "#B71C1C" };
+  const rateColor = (r) => r === null ? theme.textMuted : r >= 70 ? theme.success : r >= 40 ? theme.warning : theme.danger;
+
+  return (
+   <div style={css.container}>
+    <BackToMainButton />
+    <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Progress Dashboard" }]} />
+
+    {/* Header */}
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+     <div>
+      <h1 style={{ ...css.sectionTitle, margin: 0, marginBottom: 4 }}>📊 Progress Dashboard</h1>
+      <div style={{ fontSize: 12, color: theme.textMuted }}>Track your oral exam readiness</div>
+     </div>
+     <button style={css.btn("primary")} onClick={() => navigate("oral")}>Practice Now →</button>
+    </div>
+
+    {/* Top stats row */}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
+     {[
+      { label: "Attempted", value: attempted, sub: `of ${ORAL_SCENARIOS.length}`, color: theme.accent },
+      { label: "Correct Rate", value: `${correctRate}%`, sub: `${totalCorrect} correct`, color: rateColor(correctRate) },
+      { label: "Due Today", value: dueQuestions.length, sub: "for review", color: dueQuestions.length > 0 ? theme.warning : theme.success },
+      { label: "Not Seen", value: newQuestions.length, sub: "never practiced", color: theme.textMuted },
+      { label: "Total Attempts", value: totalAttempts, sub: `${totalWrong} wrong`, color: theme.text },
+     ].map(({ label, value, sub, color }) => (
+      <div key={label} style={{ ...css.card, padding: "16px 18px", textAlign: "center" }}>
+       <div style={{ fontSize: 26, fontWeight: 800, color, marginBottom: 2 }}>{value}</div>
+       <div style={{ fontSize: 11, fontWeight: 700, color: theme.text, marginBottom: 2 }}>{label}</div>
+       <div style={{ fontSize: 10, color: theme.textMuted }}>{sub}</div>
+      </div>
+     ))}
+    </div>
+
+    {/* Tabs */}
+    <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
+     {[
+      { key: "overview", label: "Category breakdown" },
+      { key: "due", label: `Due for review (${dueQuestions.length})` },
+      { key: "plan", label: "Study plan" },
+     ].map(t => (
+      <button key={t.key} onClick={() => setPlanTab(t.key)}
+       style={{ padding: "8px 16px", borderRadius: 10, fontSize: 12, fontWeight: planTab === t.key ? 700 : 500, cursor: "pointer",
+        background: planTab === t.key ? `${theme.accent}18` : "transparent", color: planTab === t.key ? theme.accent : theme.textMuted,
+        border: `1.5px solid ${planTab === t.key ? theme.accent : theme.border}`, transition: "all 0.2s" }}>
+       {t.label}
+      </button>
+     ))}
+    </div>
+
+    {/* Tab: overview */}
+    {planTab === "overview" && (
+     <div>
+      {/* Function-level bars */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 24 }}>
+       {fnGroups.map(({ fn, att, tot, rate }) => (
+        <div key={fn} style={{ ...css.card, padding: "16px 20px" }}>
+         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: fnColor[fn] }}>{fn}</span>
+          <span style={{ fontSize: 18, fontWeight: 800, color: rateColor(rate) }}>{rate !== null ? `${rate}%` : "—"}</span>
+         </div>
+         <div style={{ height: 6, borderRadius: 3, background: theme.border, marginBottom: 6 }}>
+          <div style={{ height: "100%", borderRadius: 3, background: rateColor(rate), width: `${rate || 0}%`, transition: "width 0.6s ease" }} />
+         </div>
+         <div style={{ fontSize: 11, color: theme.textMuted }}>{att} of {tot} practiced</div>
+        </div>
+       ))}
+      </div>
+
+      {/* Weakest categories */}
+      {weakCats.length > 0 && (
+       <div style={{ ...css.card, padding: "20px 24px", marginBottom: 20 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, margin: "0 0 16px" }}>⚠️ Weakest areas — focus here</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+         {weakCats.map(({ cat, total, att, rate, correct, partial, wrong }) => {
+          const fn = cat.startsWith("F1") ? "F1" : cat.startsWith("F2") ? "F2" : "F3";
+          const shortCat = cat.replace(/^F\d\s+—?\s*/, "").replace(/^F\d\s+/, "");
+          return (
+           <div key={cat}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: `${fnColor[fn]}22`, color: fnColor[fn], fontWeight: 700 }}>{fn}</span>
+              <span style={{ fontSize: 12, color: theme.text }}>{shortCat}</span>
+             </div>
+             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: theme.textMuted }}>{att}/{total} done</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: rateColor(rate), minWidth: 32, textAlign: "right" }}>{rate !== null ? `${rate}%` : "—"}</span>
+             </div>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: theme.border }}>
+             <div style={{ height: "100%", borderRadius: 3, background: rateColor(rate), width: `${rate || 0}%`, transition: "width 0.5s ease" }} />
+            </div>
+           </div>
+          );
+         })}
+        </div>
+       </div>
+      )}
+
+      {/* Full category table */}
+      <div style={{ ...css.card, padding: "20px 24px" }}>
+       <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 14px" }}>All categories</h3>
+       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {catStats.map(({ cat, total, att, rate }) => {
+         const fn = cat.startsWith("F1") ? "F1" : cat.startsWith("F2") ? "F2" : "F3";
+         const shortCat = cat.replace(/^F\d\s+/, "");
+         return (
+          <div key={cat} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${theme.border}` }}>
+           <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: `${fnColor[fn]}22`, color: fnColor[fn], fontWeight: 700, width: 20, textAlign: "center", flexShrink: 0 }}>{fn}</span>
+           <span style={{ fontSize: 12, color: theme.text, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shortCat}</span>
+           <div style={{ width: 80, height: 5, borderRadius: 3, background: theme.border, flexShrink: 0 }}>
+            <div style={{ height: "100%", borderRadius: 3, background: rateColor(rate), width: `${rate || 0}%` }} />
+           </div>
+           <span style={{ fontSize: 11, fontWeight: 700, color: rateColor(rate), minWidth: 28, textAlign: "right" }}>{rate !== null ? `${rate}%` : "—"}</span>
+           <span style={{ fontSize: 10, color: theme.textMuted, minWidth: 55, textAlign: "right" }}>{att}/{total}</span>
+          </div>
+         );
+        })}
+       </div>
+      </div>
+
+      {/* Written study progress (MCQ/topic) */}
+      <div style={{ ...css.card, padding: "20px 24px", marginTop: 20 }}>
+       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Written study progress</h3>
+        {Object.keys(progress).length > 0 && <button style={{ ...css.btn("danger"), fontSize: 10, padding: "4px 10px" }} onClick={() => { if (confirm("Reset all topic progress?")) { setProgress({}); setBookmarks([]); } }}>Reset</button>}
+       </div>
+       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {SUBJECTS.map(subj => {
+         const topics = subj.modules.flatMap(m => m.topics);
+         const done = topics.filter(t => progress[t.id]?.completed).length;
+         const pct = topics.length > 0 ? Math.round((done / topics.length) * 100) : 0;
+         const subjQuizzes = topics.map(t => progress[t.id]).filter(p => p?.quizScore !== undefined);
+         const subjAvg = subjQuizzes.length > 0 ? Math.round(subjQuizzes.reduce((a, p) => a + (p.quizScore / p.quizTotal) * 100, 0) / subjQuizzes.length) : null;
+         return (
+          <div key={subj.id} style={{ cursor: "pointer" }} onClick={() => navigate("subject", subj)}>
+           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>{subj.icon} {subj.name}</span>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+             {subjAvg !== null && <span style={{ fontSize: 11, color: subjAvg >= 70 ? theme.success : theme.warning }}>Quiz avg: {subjAvg}%</span>}
+             <span style={{ fontSize: 12, fontWeight: 700, color: subj.color }}>{pct}%</span>
+            </div>
+           </div>
+           <ProgressBar value={done} max={topics.length} color={subj.color} height={5} />
+           <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2 }}>{done}/{topics.length} topics</div>
+          </div>
+         );
+        })}
+       </div>
+      </div>
+
+      {bookmarks.length > 0 && (
+       <div style={{ ...css.card, padding: "20px 24px", marginTop: 20 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 12px" }}>★ Bookmarked topics</h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+         {bookmarks.map(bId => {
+          const topic = getAllTopics().find(t => t.id === bId);
+          if (!topic) return null;
+          return <div key={bId} style={{ ...css.card, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }} onClick={() => navigate("topic", null, null, topic)}><span>{topic.name}</span><span style={{ color: theme.textMuted }}>›</span></div>;
+         })}
+        </div>
+       </div>
+      )}
+     </div>
+    )}
+
+    {/* Tab: due for review */}
+    {planTab === "due" && (
+     <div>
+      {dueQuestions.length === 0 ? (
+       <div style={{ ...css.card, padding: 40, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Nothing due for review!</div>
+        <div style={{ fontSize: 13, color: theme.textMuted, marginBottom: 20 }}>All your practiced questions are scheduled for future review. Keep it up.</div>
+        <button style={css.btn("primary")} onClick={() => navigate("oral")}>Practice new questions →</button>
+       </div>
+      ) : (
+       <div>
+        <div style={{ fontSize: 13, color: theme.textMuted, marginBottom: 14 }}>{dueQuestions.length} question{dueQuestions.length !== 1 ? "s" : ""} due — these need to be practiced again now</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+         {dueQuestions.slice(0, 40).map(s => {
+          const p = perf[s.id];
+          const fn = s.category.startsWith("F1") ? "F1" : s.category.startsWith("F2") ? "F2" : "F3";
+          return (
+           <div key={s.id} style={{ ...css.card, padding: "14px 18px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+             <div style={{ display: "flex", gap: 5, marginBottom: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: `${fnColor[fn]}22`, color: fnColor[fn], fontWeight: 700 }}>{fn}</span>
+              <span style={{ fontSize: 10, color: p?.lastResult === "wrong" ? theme.danger : p?.lastResult === "partial" ? theme.warning : theme.success }}>
+               Last: {p?.lastResult === "correct" ? "✓ Got it" : p?.lastResult === "partial" ? "~ Partial" : "✗ Wrong"}
+              </span>
+             </div>
+             <p style={{ fontSize: 12, margin: 0, lineHeight: 1.5, color: theme.text }}>{s.question}</p>
+            </div>
+           </div>
+          );
+         })}
+         {dueQuestions.length > 40 && <div style={{ fontSize: 12, color: theme.textMuted, textAlign: "center", padding: 12 }}>...and {dueQuestions.length - 40} more — go to Oral Practice to review them all</div>}
+        </div>
+        <div style={{ marginTop: 20 }}>
+         <button style={{ ...css.btn("primary"), width: "100%", padding: "14px" }} onClick={() => navigate("oral")}>Go to Oral Practice to review →</button>
+        </div>
+       </div>
+      )}
+     </div>
+    )}
+
+    {/* Tab: study plan */}
+    {planTab === "plan" && (
+     <div>
+      <div style={{ ...css.card, padding: "20px 24px", marginBottom: 20 }}>
+       <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 14px" }}>🗓 Set your exam date</h3>
+       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <input type="date" value={examDateInput} onChange={e => setExamDateInput(e.target.value)}
+         style={{ ...css.input, padding: "8px 14px", fontSize: 13, width: "auto" }} />
+        <button style={css.btn("primary")} onClick={handleSavePlan} disabled={!examDateInput}>Generate plan</button>
+        {plan && <button style={css.btn()} onClick={() => { saveStudyPlan(null); setPlan(null); setExamDateInput(""); }}>Clear</button>}
+       </div>
+       {plan && (
+        <div style={{ marginTop: 14, fontSize: 13, color: theme.textMuted }}>
+         Exam in <strong style={{ color: theme.text }}>{plan.daysLeft} days</strong> · {plan.weeks}-week study plan generated
+        </div>
+       )}
+      </div>
+
+      {plan && (
+       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {plan.schedule.map((week, idx) => {
+         const isPast = idx < currentWeek;
+         const isCurrent = idx === currentWeek;
+         const isFuture = idx > currentWeek;
+         const weekStart = new Date(plan.createdAt + idx * 7 * 86400000);
+         const weekLabel = weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+         const weekQs = week.cats.length > 0 ? ORAL_SCENARIOS.filter(s => week.cats.some(c => s.category.includes(c.replace(/^F\d — /, "").split(" ")[0]))) : ORAL_SCENARIOS;
+         const weekAtt = weekQs.filter(s => perf[s.id]?.lastSeen).length;
+         const weekRate = weekQs.length > 0 ? Math.round((weekAtt / weekQs.length) * 100) : 0;
+         return (
+          <div key={idx} style={{ ...css.card, padding: "16px 20px", borderLeft: `3px solid ${isCurrent ? theme.gold : isPast ? theme.success : theme.border}`, opacity: isFuture ? 0.7 : 1 }}>
+           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+            <div>
+             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: isCurrent ? theme.gold : isPast ? theme.success : theme.textMuted }}>
+               {isPast ? "✓ Week " : isCurrent ? "▶ Week " : "Week "}{idx + 1}
+              </span>
+              <span style={{ fontSize: 10, color: theme.textMuted }}>from {weekLabel}</span>
+              {isCurrent && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, background: `${theme.gold}20`, color: theme.gold, fontWeight: 700 }}>CURRENT</span>}
+             </div>
+             <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, marginBottom: 6 }}>{week.label}</div>
+             <div style={{ fontSize: 11, color: theme.textMuted }}>{weekQs.length} questions · {weekAtt} practiced ({weekRate}%)</div>
+            </div>
+            {isCurrent && (
+             <button style={{ ...css.btn("primary"), padding: "6px 14px", fontSize: 11, flexShrink: 0 }} onClick={() => navigate("oral")}>Practice now</button>
+            )}
+           </div>
+           {(isCurrent || isPast) && (
+            <div style={{ marginTop: 10, height: 5, borderRadius: 3, background: theme.border }}>
+             <div style={{ height: "100%", borderRadius: 3, background: isCurrent ? theme.gold : theme.success, width: `${weekRate}%`, transition: "width 0.5s" }} />
+            </div>
+           )}
+          </div>
+         );
+        })}
+       </div>
+      )}
+      {!plan && (
+       <div style={{ ...css.card, padding: 32, textAlign: "center" }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📅</div>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>No exam date set</div>
+        <div style={{ fontSize: 13, color: theme.textMuted }}>Enter your exam date above to generate a personalised week-by-week study plan.</div>
+       </div>
+      )}
+     </div>
+    )}
+   </div>
+  );
+ };
+
+ // ═══════════════════════════════════════════════
+ // PAGE: EXAM REPORTS
+ // ═══════════════════════════════════════════════
+ const ExamReportsPage = () => {
+  const MMD_CENTRES = ["Mumbai", "Chennai", "Kolkata", "Kochi", "Goa", "Bhubaneswar", "Kandla", "Visakhapatnam"];
+  const ORAL_TOPICS = ["COLREGS / ROR", "Lights & Shapes", "Narrow Channel & TSS", "Fog & Restricted Visibility", "MARPOL", "SOLAS", "ISM Code", "Ship Stability", "Cargo & Stowage", "LSA & Life Saving", "Fire Fighting", "Anchoring", "Radar & ARPA", "Watchkeeping", "Certificates & Surveys"];
+  const DIFFICULTY = ["Very easy", "Easy", "Moderate", "Tough", "Very tough"];
+
+  const [reports, setReports] = useState(() => getExamReports());
+  const [view, setView] = useState("browse"); // "browse" | "submit"
+  const [filterMMD, setFilterMMD] = useState("All");
+
+  // form state
+  const [fm, setFm] = useState({ mmd: "", examDate: "", examiner: "", topics: [], specificQs: "", difficulty: 3, passed: true, notes: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleTopicToggle = (t) => setFm(f => ({ ...f, topics: f.topics.includes(t) ? f.topics.filter(x => x !== t) : [...f.topics, t] }));
+
+  const handleSubmit = () => {
+   if (!fm.mmd || !fm.examDate || submitting) return;
+   setSubmitting(true);
+   const report = {
+    id: generateId("rpt"),
+    ...fm,
+    userId: currentUser.email,
+    userName: currentUser.displayName || currentUser.email,
+    timestamp: Date.now(),
+   };
+   const updated = [report, ...reports];
+   saveExamReports(updated);
+   setReports(updated);
+   submitExamReportToFirestore(report);
+   // Tag MMD on questions mentioned
+   if (fm.specificQs.trim()) {
+    const tags = getMMDTags();
+    // tag any question whose text roughly matches a word in the notes
+    const words = fm.specificQs.toLowerCase().split(/\s+/).filter(w => w.length > 5);
+    ORAL_SCENARIOS.forEach(s => {
+     if (words.some(w => s.question.toLowerCase().includes(w))) {
+      if (!tags[s.id]) tags[s.id] = [];
+      if (!tags[s.id].includes(fm.mmd)) tags[s.id] = [...tags[s.id], fm.mmd];
+     }
+    });
+    saveMMDTags(tags);
+   }
+   setSubmitting(false);
+   setSubmitted(true);
+   setFm({ mmd: "", examDate: "", examiner: "", topics: [], specificQs: "", difficulty: 3, passed: true, notes: "" });
+   setTimeout(() => { setSubmitted(false); setView("browse"); }, 2000);
+  };
+
+  const displayed = filterMMD === "All" ? reports : reports.filter(r => r.mmd === filterMMD);
+
+  return (
+   <div style={css.container}>
+    <BackToMainButton />
+    <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Exam Reports" }]} />
+
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+     <div>
+      <h1 style={{ ...css.sectionTitle, margin: 0, marginBottom: 4 }}>📋 MMD Exam Reports</h1>
+      <div style={{ fontSize: 12, color: theme.textMuted }}>Community oral exam experiences — what was actually asked</div>
+     </div>
+     <div style={{ display: "flex", gap: 8 }}>
+      <button style={css.btn(view === "browse" ? "primary" : "")} onClick={() => setView("browse")}>Browse ({reports.length})</button>
+      <button style={css.btn(view === "submit" ? "primary" : "")} onClick={() => setView("submit")}>+ Submit report</button>
+     </div>
+    </div>
+
+    {view === "submit" && (
+     <div style={{ ...css.card, padding: "24px 28px", maxWidth: 620 }}>
+      <h3 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 20px" }}>Submit your oral exam report</h3>
+      {submitted && <div style={{ padding: "12px 16px", background: `${theme.success}18`, border: `1px solid ${theme.success}40`, borderRadius: 8, marginBottom: 16, fontSize: 13, color: theme.success }}>✓ Report submitted — thank you!</div>}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+       <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 4 }}>MMD Centre *</label>
+        <select value={fm.mmd} onChange={e => setFm(f => ({ ...f, mmd: e.target.value }))} style={{ ...css.input, width: "100%", padding: "8px 10px" }}>
+         <option value="">Select MMD...</option>
+         {MMD_CENTRES.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+       </div>
+       <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 4 }}>Exam date *</label>
+        <input type="date" value={fm.examDate} onChange={e => setFm(f => ({ ...f, examDate: e.target.value }))} style={{ ...css.input, width: "100%", padding: "8px 10px" }} />
+       </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+       <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 4 }}>Examiner name (optional)</label>
+       <input value={fm.examiner} onChange={e => setFm(f => ({ ...f, examiner: e.target.value }))} placeholder="e.g. Capt. Sharma (if known)" style={{ ...css.input, width: "100%", padding: "8px 12px" }} />
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+       <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 8 }}>Topics asked (select all that apply)</label>
+       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {ORAL_TOPICS.map(t => (
+         <button key={t} onClick={() => handleTopicToggle(t)}
+          style={{ padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer",
+           background: fm.topics.includes(t) ? `${theme.accent}18` : "transparent",
+           color: fm.topics.includes(t) ? theme.accent : theme.textMuted,
+           border: `1px solid ${fm.topics.includes(t) ? theme.accent : theme.border}`, fontWeight: fm.topics.includes(t) ? 700 : 400 }}>
+          {t}
+         </button>
+        ))}
+       </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+       <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 4 }}>Specific questions asked</label>
+       <textarea value={fm.specificQs} onChange={e => setFm(f => ({ ...f, specificQs: e.target.value }))} rows={4}
+        placeholder="Write the actual questions asked. This helps other candidates prepare. e.g. 'What is Rule 9? What is CBD vessel? Explain MARPOL Annex V...'"
+        style={{ ...css.input, width: "100%", padding: "10px 12px", resize: "vertical", fontFamily: "inherit" }} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+       <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 8 }}>Difficulty: {DIFFICULTY[fm.difficulty - 1]}</label>
+        <input type="range" min={1} max={5} value={fm.difficulty} onChange={e => setFm(f => ({ ...f, difficulty: +e.target.value }))}
+         style={{ width: "100%", accentColor: theme.accent }} />
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: theme.textMuted, marginTop: 2 }}>
+         <span>Very easy</span><span>Very tough</span>
+        </div>
+       </div>
+       <div>
+        <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 8 }}>Result</label>
+        <div style={{ display: "flex", gap: 8 }}>
+         {[true, false].map(passed => (
+          <button key={String(passed)} onClick={() => setFm(f => ({ ...f, passed }))}
+           style={{ flex: 1, padding: "8px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700,
+            background: fm.passed === passed ? (passed ? `${theme.success}20` : `${theme.danger}20`) : "transparent",
+            color: fm.passed === passed ? (passed ? theme.success : theme.danger) : theme.textMuted,
+            border: `1.5px solid ${fm.passed === passed ? (passed ? theme.success : theme.danger) : theme.border}` }}>
+           {passed ? "✓ Passed" : "✗ Failed"}
+          </button>
+         ))}
+        </div>
+       </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+       <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, display: "block", marginBottom: 4 }}>Additional notes</label>
+       <textarea value={fm.notes} onChange={e => setFm(f => ({ ...f, notes: e.target.value }))} rows={2}
+        placeholder="Any tips for others — examiner style, advice, things to focus on..."
+        style={{ ...css.input, width: "100%", padding: "10px 12px", resize: "vertical", fontFamily: "inherit" }} />
+      </div>
+
+      <button style={{ ...css.btn("primary"), width: "100%", padding: "12px" }}
+       onClick={handleSubmit} disabled={!fm.mmd || !fm.examDate || submitting}>
+       {submitting ? "Submitting..." : "Submit report"}
+      </button>
+     </div>
+    )}
+
+    {view === "browse" && (
+     <div>
+      {/* MMD filter */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+       {["All", ...MMD_CENTRES].map(m => (
+        <button key={m} onClick={() => setFilterMMD(m)}
+         style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: filterMMD === m ? 700 : 400,
+          background: filterMMD === m ? `${theme.accent}18` : "transparent", color: filterMMD === m ? theme.accent : theme.textMuted,
+          border: `1px solid ${filterMMD === m ? theme.accent : theme.border}` }}>
+         {m} {m !== "All" ? `(${reports.filter(r => r.mmd === m).length})` : `(${reports.length})`}
+        </button>
+       ))}
+      </div>
+
+      {displayed.length === 0 ? (
+       <div style={{ ...css.card, padding: 40, textAlign: "center" }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>No reports yet</div>
+        <div style={{ fontSize: 13, color: theme.textMuted, marginBottom: 20 }}>Be the first to share your oral exam experience. It helps every candidate who comes after you.</div>
+        <button style={css.btn("primary")} onClick={() => setView("submit")}>Submit the first report →</button>
+       </div>
+      ) : (
+       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {displayed.sort((a, b) => b.timestamp - a.timestamp).map(r => (
+         <div key={r.id} style={{ ...css.card, padding: "20px 24px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ ...css.badge(theme.accent), fontSize: 11 }}>📍 {r.mmd} MMD</span>
+            <span style={{ ...css.badge(r.passed ? theme.success : theme.danger), fontSize: 11 }}>{r.passed ? "✓ Passed" : "✗ Failed"}</span>
+            <span style={{ ...css.badge(theme.warning), fontSize: 11 }}>Difficulty: {r.difficulty}/5</span>
+           </div>
+           <div style={{ fontSize: 11, color: theme.textMuted }}>
+            {r.examDate && new Date(r.examDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+           </div>
+          </div>
+
+          {r.examiner && <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8 }}>Examiner: {r.examiner}</div>}
+
+          {r.topics?.length > 0 && (
+           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+            {r.topics.map(t => <span key={t} style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: `${theme.accent}12`, color: theme.accent, border: `1px solid ${theme.accent}25` }}>{t}</span>)}
+           </div>
+          )}
+
+          {r.specificQs && (
+           <div style={{ padding: "12px 14px", background: theme.surfaceAlt, borderRadius: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.8 }}>Questions asked</div>
+            <p style={{ fontSize: 12, lineHeight: 1.6, margin: 0, color: theme.text }}>{r.specificQs}</p>
+           </div>
+          )}
+
+          {r.notes && <p style={{ fontSize: 12, color: theme.textMuted, lineHeight: 1.6, margin: 0, fontStyle: "italic" }}>{r.notes}</p>}
+
+          <div style={{ marginTop: 10, fontSize: 11, color: theme.textMuted }}>
+           Shared by {r.userName} · {new Date(r.timestamp).toLocaleDateString("en-IN")}
+          </div>
+         </div>
+        ))}
+       </div>
+      )}
+     </div>
+    )}
+   </div>
+  );
+ };
+
+ // ═══════════════════════════════════════════════
  // PAGE: ORAL EXAM
  // ═══════════════════════════════════════════════
+ // ═══════════════════════════════════════════════════════════════════════
+ // AI MOCK ORAL EXAMINATION — Separate dedicated exam session page
+ // ═══════════════════════════════════════════════════════════════════════
+ const AIMockOralPage = () => {
+  const [phase, setPhase] = useState('setup'); // setup | exam | results
+  const [cfg, setCfg] = useState({ fn: 'All', count: 10, difficulty: 'Mixed' });
+  const [examQs, setExamQs] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [results, setResults] = useState([]); // [{scenario, transcription, evaluation}]
+
+  // Mic state
+  const [micState, setMicState] = useState('idle');
+  const [micError, setMicError] = useState('');
+  const [transcription, setTranscription] = useState('');
+  const [evaluation, setEvaluation] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+
+  // Auto-speak question when exam starts or question changes
+  useEffect(() => {
+   if (phase !== 'exam' || !examQs[idx]) return;
+   setMicState('idle'); setMicError(''); setTranscription(''); setEvaluation(null);
+   const timer = setTimeout(() => autoSpeak(examQs[idx].question), 800);
+   return () => clearTimeout(timer);
+  }, [idx, phase]);
+
+  const autoSpeak = (text) => {
+   if (!window.speechSynthesis) return;
+   window.speechSynthesis.cancel();
+   const utter = new SpeechSynthesisUtterance(text);
+   utter.lang = 'en-IN'; utter.rate = 0.78; utter.pitch = 0.55; utter.volume = 1;
+   utter.onstart = () => setIsSpeaking(true);
+   utter.onend = () => setIsSpeaking(false);
+   utter.onerror = () => setIsSpeaking(false);
+   const go = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const priority = ['rishi','ravi','neel','mohan'];
+    let v = null;
+    for (const n of priority) { v = voices.find(x => x.name.toLowerCase().includes(n)); if (v) break; }
+    if (!v) v = voices.find(x => x.lang === 'en-IN');
+    if (v) utter.voice = v;
+    window.speechSynthesis.speak(utter);
+   };
+   if (window.speechSynthesis.getVoices().length > 0) go();
+   else window.speechSynthesis.onvoiceschanged = go;
+  };
+
+  const startExam = () => {
+   let pool = ORAL_SCENARIOS;
+   if (cfg.fn !== 'All') pool = pool.filter(s => s.category.startsWith(cfg.fn));
+   if (cfg.difficulty !== 'Mixed') pool = pool.filter(s => s.difficulty === cfg.difficulty);
+   const shuffled = [...pool].sort(() => Math.random() - 0.5);
+   const selected = shuffled.slice(0, Math.min(cfg.count, pool.length));
+   setExamQs(selected); setIdx(0); setResults([]); setPhase('exam');
+  };
+
+  const enumerateDevices = async () => {
+   try {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const mics = devs.filter(d => d.kind === 'audioinput');
+    setAudioDevices(mics);
+    if (mics.length && !selectedDeviceId) setSelectedDeviceId(mics[0].deviceId);
+   } catch {}
+  };
+
+  const transcribeAndEval = async (b64, scenario) => {
+   try {
+    setMicState('transcribing');
+    const tr = await fetch('/api/groq-oral', { method:'POST', headers:{'Content-Type':'application/json'},
+     body: JSON.stringify({ action:'transcribe', audioBase64: b64 }) });
+    const td = await tr.json();
+    if (td.error) throw new Error(td.error);
+    setTranscription(td.text || '');
+    setMicState('evaluating');
+    const er = await fetch('/api/groq-oral', { method:'POST', headers:{'Content-Type':'application/json'},
+     body: JSON.stringify({ action:'evaluate', question: scenario.question,
+      modelAnswer: scenario.modelAnswer, candidateAnswer: td.text || '' }) });
+    const ed = await er.json();
+    if (ed.error) throw new Error(ed.error);
+    setEvaluation(ed);
+    setMicState('done');
+   } catch(err) { setMicError(err.message); setMicState('error'); }
+  };
+
+  const startRecording = async (scenario) => {
+   setMicError('');
+   if (!navigator.mediaDevices?.getUserMedia) { setMicError('Microphone not supported on this browser.'); setMicState('error'); return; }
+   try {
+    const stream = await navigator.mediaDevices.getUserMedia(
+     { audio: selectedDeviceId ? { deviceId:{ exact: selectedDeviceId } } : true });
+    await enumerateDevices();
+    audioChunksRef.current = [];
+    const rec = new MediaRecorder(stream);
+    rec.ondataavailable = e => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+    rec.onstop = () => {
+     stream.getTracks().forEach(t => t.stop());
+     const blob = new Blob(audioChunksRef.current, { type:'audio/webm' });
+     const reader = new FileReader();
+     reader.onloadend = () => transcribeAndEval(reader.result.split(',')[1], scenario);
+     reader.readAsDataURL(blob);
+    };
+    mediaRecorderRef.current = rec; rec.start(); setMicState('recording');
+   } catch(err) {
+    const msg = err.name==='NotAllowedError' ? 'Microphone permission denied. Allow mic in browser settings.'
+     : err.name==='NotFoundError' ? 'No microphone found on this device.'
+     : err.name==='NotReadableError' ? 'Mic in use by another app. Close it and try again.'
+     : err.message;
+    setMicError(msg); setMicState('error');
+   }
+  };
+
+  const stopRecording = () => {
+   if (mediaRecorderRef.current?.state === 'recording') { setMicState('transcribing'); mediaRecorderRef.current.stop(); }
+  };
+
+  const saveAndNext = () => {
+   const newResults = [...results, { scenario: examQs[idx], transcription, evaluation }];
+   setResults(newResults);
+   if (idx + 1 >= examQs.length) { setPhase('results'); window.speechSynthesis.cancel(); }
+   else { setIdx(i => i + 1); }
+  };
+
+  // ── SETUP SCREEN ──────────────────────────────────────────────────────
+  if (phase === 'setup') return (
+   <div style={css.container}>
+    <BackToMainButton />
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+     {/* Header */}
+     <div style={{ textAlign: 'center', marginBottom: 36 }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>🎓</div>
+      <h1 style={{ ...css.sectionTitle, fontSize: 26, marginBottom: 8 }}>AI Mock Oral Examination</h1>
+      <p style={{ fontSize: 14, color: theme.textMuted, lineHeight: 1.7, maxWidth: 420, margin: '0 auto' }}>
+       The AI examiner will ask questions one by one in voice. Speak your answer — Groq Whisper transcribes it,
+       LLaMA 3 evaluates it and shows exactly what you missed.
+      </p>
+     </div>
+
+     {/* Config card */}
+     <div style={{ ...css.card, padding: 28, marginBottom: 20 }}>
+      {/* Function */}
+      <div style={{ marginBottom: 22 }}>
+       <div style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, marginBottom: 10,
+        textTransform: 'uppercase', letterSpacing: 0.8 }}>Function</div>
+       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {[['All','All Functions'],['F1','F1 — Navigation'],['F2','F2 — Cargo'],['F3','F3 — Safety']].map(([k,l]) => (
+         <button key={k} onClick={() => setCfg(c => ({...c, fn: k}))}
+          style={{ padding:'8px 16px', borderRadius:10, fontSize:12, cursor:'pointer', fontWeight: cfg.fn===k?700:500,
+           background: cfg.fn===k ? `${theme.accent}18` : 'transparent',
+           color: cfg.fn===k ? theme.accent : theme.textMuted,
+           border:`1.5px solid ${cfg.fn===k ? theme.accent : theme.border}` }}>{l}</button>
+        ))}
+       </div>
+      </div>
+
+      {/* Number of questions */}
+      <div style={{ marginBottom: 22 }}>
+       <div style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, marginBottom: 10,
+        textTransform: 'uppercase', letterSpacing: 0.8 }}>Number of Questions</div>
+       <div style={{ display: 'flex', gap: 8 }}>
+        {[5, 10, 15, 20].map(n => (
+         <button key={n} onClick={() => setCfg(c => ({...c, count: n}))}
+          style={{ flex:1, padding:'10px', borderRadius:10, fontSize:14, fontWeight: cfg.count===n?800:500,
+           cursor:'pointer', background: cfg.count===n ? theme.accent : 'transparent',
+           color: cfg.count===n ? '#fff' : theme.textMuted,
+           border:`1.5px solid ${cfg.count===n ? theme.accent : theme.border}` }}>{n}</button>
+        ))}
+       </div>
+      </div>
+
+      {/* Difficulty */}
+      <div style={{ marginBottom: 8 }}>
+       <div style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, marginBottom: 10,
+        textTransform: 'uppercase', letterSpacing: 0.8 }}>Difficulty</div>
+       <div style={{ display: 'flex', gap: 8 }}>
+        {[['Mixed','Mixed'],['High','High only'],['Medium','Medium only']].map(([k,l]) => (
+         <button key={k} onClick={() => setCfg(c => ({...c, difficulty: k}))}
+          style={{ flex:1, padding:'8px', borderRadius:10, fontSize:12, cursor:'pointer',
+           fontWeight: cfg.difficulty===k?700:500,
+           background: cfg.difficulty===k ? `${theme.accent}18` : 'transparent',
+           color: cfg.difficulty===k ? theme.accent : theme.textMuted,
+           border:`1.5px solid ${cfg.difficulty===k ? theme.accent : theme.border}` }}>{l}</button>
+        ))}
+       </div>
+      </div>
+     </div>
+
+     {/* Info strip */}
+     <div style={{ ...css.card, padding:'14px 20px', marginBottom:20, background: darkMode?'#1a1a2e':'#f4f6ff',
+      display:'flex', gap:16, flexWrap:'wrap' }}>
+      {[['🔊','Examiner speaks each question aloud'],['🎤','You speak your answer'],
+        ['🧠','AI scores against key points'],['📊','Full report at the end']].map(([i,t]) => (
+       <div key={t} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:theme.textMuted }}>
+        <span>{i}</span><span>{t}</span>
+       </div>
+      ))}
+     </div>
+
+     <button onClick={startExam} style={{ ...css.btn('primary'), width:'100%', padding:'16px',
+      fontSize:16, fontWeight:700, borderRadius:12 }}>
+      Begin Examination →
+     </button>
+    </div>
+   </div>
+  );
+
+  // ── EXAM SCREEN ────────────────────────────────────────────────────────
+  if (phase === 'exam') {
+   const scenario = examQs[idx];
+   const totalPoints = (evaluation?.covered?.length||0) + (evaluation?.missed?.length||0);
+   return (
+    <div style={css.container}>
+     {/* Top bar */}
+     <div style={{ maxWidth: 640, margin: '0 auto 20px', display:'flex',
+      justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ fontSize:13, fontWeight:600, color: theme.textMuted }}>
+       Question {idx+1} of {examQs.length}
+      </div>
+      <button onClick={() => { window.speechSynthesis.cancel(); setPhase('setup'); }}
+       style={{ ...css.btn(), padding:'6px 14px', fontSize:12 }}>Exit</button>
+     </div>
+
+     {/* Progress bar */}
+     <div style={{ maxWidth:640, margin:'0 auto 24px' }}>
+      <div style={{ height:4, background:theme.border, borderRadius:2, overflow:'hidden' }}>
+       <div style={{ height:'100%', width:`${((idx)/examQs.length)*100}%`,
+        background: `linear-gradient(90deg,${theme.accent},#7B4FA8)`, borderRadius:2, transition:'width 0.4s' }} />
+      </div>
+     </div>
+
+     <div style={{ maxWidth:640, margin:'0 auto', display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* Examiner card */}
+      <div style={{ ...css.card, padding:0, overflow:'hidden',
+       border:`1.5px solid ${darkMode?'rgba(212,175,55,0.2)':'rgba(123,79,168,0.15)'}` }}>
+       <div style={{ height:3, background:'linear-gradient(90deg,#d4af37,#7B4FA8)' }} />
+       <div style={{ padding:'20px 24px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+         <div style={{ width:44, height:44, borderRadius:12, background:'linear-gradient(135deg,#7B4FA8,#4a2080)',
+          display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>👨‍⚖️</div>
+         <div>
+          <div style={{ fontWeight:700, fontSize:14 }}>DG Shipping Oral Examiner</div>
+          <div style={{ fontSize:11, color:theme.textMuted }}>
+           <span style={{ ...css.badge(scenario.difficulty==='High'?theme.danger:theme.warning),
+            fontSize:9, padding:'1px 6px', marginRight:6 }}>{scenario.difficulty}</span>
+           {scenario.category}
+          </div>
+         </div>
+         {/* TTS status */}
+         <div style={{ marginLeft:'auto', display:'flex', gap:6, alignItems:'center' }}>
+          {isSpeaking && <span style={{ fontSize:11, color:theme.accent, fontWeight:600 }}>🔊 Speaking…</span>}
+          <button onClick={() => { if(isSpeaking){window.speechSynthesis.cancel();setIsSpeaking(false);}
+           else autoSpeak(scenario.question); }}
+           style={{ padding:'5px 10px', borderRadius:8, border:`1px solid ${theme.border}`,
+            background:'transparent', fontSize:11, cursor:'pointer', color:theme.textMuted }}>
+           {isSpeaking ? 'Stop' : '🔊 Repeat'}
+          </button>
+         </div>
+        </div>
+        {/* Question */}
+        <p style={{ fontSize:17, fontWeight:600, lineHeight:1.65, margin:0, fontFamily:"'Playfair Display',serif" }}>
+         {scenario.question}
+        </p>
+       </div>
+      </div>
+
+      {/* Voice Answer */}
+      <div style={{ ...css.card, padding:20 }}>
+       <div style={{ fontSize:11, fontWeight:700, color:theme.textMuted, marginBottom:12,
+        textTransform:'uppercase', letterSpacing:0.8 }}>Your Answer</div>
+
+       {micState === 'idle' && (
+        <div>
+         {audioDevices.length > 1 && (
+          <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)}
+           style={{ ...css.input, fontSize:12, marginBottom:8, padding:'6px 10px', width:'100%' }}>
+           {audioDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label||'Microphone'}</option>)}
+          </select>
+         )}
+         <button onClick={() => startRecording(scenario)}
+          style={{ width:'100%', padding:'14px', borderRadius:10, border:'none',
+           background:'#e53935', color:'#fff', fontSize:15, fontWeight:700, cursor:'pointer' }}>
+          ⏺ &nbsp;Speak Your Answer
+         </button>
+        </div>
+       )}
+
+       {micState === 'recording' && (
+        <div style={{ border:'2px solid #e53935', borderRadius:12, padding:24, textAlign:'center',
+         background: darkMode?'#2d0a0a':'#fff5f5' }}>
+         <div style={{ fontSize:32, marginBottom:8 }}>🔴</div>
+         <div style={{ fontSize:14, fontWeight:700, color:'#e53935', marginBottom:6 }}>Recording…</div>
+         <div style={{ fontSize:12, color:theme.textMuted, marginBottom:16 }}>Speak clearly — click Stop when done</div>
+         <button onClick={stopRecording} style={{ padding:'11px 36px', borderRadius:10, border:'none',
+          background:'#e53935', color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+          ⏹ &nbsp;Stop Recording
+         </button>
+        </div>
+       )}
+
+       {micState === 'transcribing' && (
+        <div style={{ padding:24, textAlign:'center' }}>
+         <div style={{ fontSize:28, marginBottom:8 }}>🎙️</div>
+         <div style={{ fontSize:13, fontWeight:600 }}>Transcribing…</div>
+         <div style={{ fontSize:11, color:theme.textMuted }}>Groq Whisper converting speech to text</div>
+        </div>
+       )}
+
+       {micState === 'evaluating' && (
+        <div style={{ padding:24, textAlign:'center' }}>
+         <div style={{ fontSize:28, marginBottom:8 }}>🧠</div>
+         <div style={{ fontSize:13, fontWeight:600 }}>AI Examiner evaluating…</div>
+         {transcription && <div style={{ fontSize:11, color:theme.textMuted, fontStyle:'italic', marginTop:6 }}>
+          "{transcription.slice(0,100)}{transcription.length>100?'…':''}"
+         </div>}
+        </div>
+       )}
+
+       {micState === 'error' && (
+        <div style={{ border:`1.5px solid ${theme.danger}44`, borderRadius:12, padding:16,
+         background: darkMode?'#2d0a0a':'#fff5f5' }}>
+         <div style={{ fontSize:13, color:theme.danger, fontWeight:600, marginBottom:6 }}>⚠️ Something went wrong</div>
+         {micError && <div style={{ fontSize:12, color:theme.text, marginBottom:10, padding:'8px 12px',
+          background: darkMode?'#ffffff0a':'#fff', borderRadius:8, border:`1px solid ${theme.border}` }}>{micError}</div>}
+         <button onClick={() => { setMicState('idle'); setMicError(''); }}
+          style={{ fontSize:12, padding:'6px 14px', borderRadius:8, border:`1px solid ${theme.border}`,
+           background:'transparent', color:theme.textMuted, cursor:'pointer' }}>Try again</button>
+        </div>
+       )}
+
+       {/* Evaluation result */}
+       {micState === 'done' && evaluation && (
+        <div>
+         {/* Score header */}
+         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+          padding:'12px 16px', background: darkMode?'#1a1a2e':'#f4f6ff', borderRadius:10, marginBottom:12 }}>
+          <div>
+           <div style={{ fontWeight:700, fontSize:14 }}>📊 Examiner's Assessment</div>
+           <div style={{ fontSize:11, color:theme.textMuted, fontStyle:'italic', marginTop:2 }}>
+            "{transcription.slice(0,80)}{transcription.length>80?'…':''}"
+           </div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+           <div style={{ fontSize:26, fontWeight:900,
+            color: evaluation.score >= Math.ceil(totalPoints*0.6) ? theme.success : evaluation.score >= Math.ceil(totalPoints*0.4) ? theme.warning : theme.danger }}>
+            {evaluation.score}/{totalPoints}
+           </div>
+           <div style={{ fontSize:10, color:theme.textMuted }}>key points</div>
+          </div>
+         </div>
+
+         {evaluation.covered?.length>0 && (
+          <div style={{ marginBottom:10, padding:'10px 14px', background: darkMode?'#0a1a0a':'#f0fff4',
+           borderRadius:10, border:`1px solid ${theme.success}33` }}>
+           <div style={{ fontSize:11, fontWeight:700, color:theme.success, marginBottom:6,
+            textTransform:'uppercase', letterSpacing:0.5 }}>✅ Covered ({evaluation.covered.length})</div>
+           {evaluation.covered.map((p,i) => <div key={i} style={{ fontSize:12, color:theme.text,
+            padding:'3px 0', borderTop: i>0?`1px solid ${theme.border}22`:'none' }}>• {p}</div>)}
+          </div>
+         )}
+
+         {evaluation.missed?.length>0 && (
+          <div style={{ marginBottom:10, padding:'10px 14px', background: darkMode?'#1a0a0a':'#fff8f8',
+           borderRadius:10, border:`1px solid ${theme.danger}33` }}>
+           <div style={{ fontSize:11, fontWeight:700, color:theme.danger, marginBottom:6,
+            textTransform:'uppercase', letterSpacing:0.5 }}>❌ Missed ({evaluation.missed.length})</div>
+           {evaluation.missed.map((p,i) => <div key={i} style={{ fontSize:12, color:theme.text,
+            padding:'3px 0', borderTop: i>0?`1px solid ${theme.border}22`:'none' }}>• {p}</div>)}
+          </div>
+         )}
+
+         {evaluation.feedback && (
+          <div style={{ fontSize:13, color:theme.textMuted, fontStyle:'italic', padding:'10px 14px',
+           background: darkMode?'#1a1a2e':'#f9f9ff', borderRadius:10, marginBottom:12 }}>
+           💬 "{evaluation.feedback}"
+          </div>
+         )}
+
+         <button onClick={saveAndNext}
+          style={{ ...css.btn('primary'), width:'100%', padding:'13px', fontSize:14, fontWeight:700, borderRadius:10 }}>
+          {idx+1 >= examQs.length ? '📋 View Final Report' : `Next Question → (${idx+2}/${examQs.length})`}
+         </button>
+        </div>
+       )}
+      </div>
+     </div>
+    </div>
+   );
+  }
+
+  // ── RESULTS SCREEN ─────────────────────────────────────────────────────
+  if (phase === 'results') {
+   const totalScore = results.reduce((s,r) => s + (r.evaluation?.score||0), 0);
+   const maxScore = results.reduce((s,r) => s + ((r.evaluation?.covered?.length||0)+(r.evaluation?.missed?.length||0)), 0);
+   const pct = maxScore > 0 ? Math.round((totalScore/maxScore)*100) : 0;
+   const passed = pct >= 60;
+   const resultColor = pct>=75 ? theme.success : pct>=50 ? theme.warning : theme.danger;
+
+   // Collect all missed points for weak area analysis
+   const allMissed = results.flatMap(r => r.evaluation?.missed||[]);
+   const weakAreas = [...new Set(results.filter(r => {
+    const t = (r.evaluation?.covered?.length||0)+(r.evaluation?.missed?.length||0);
+    return t>0 && (r.evaluation?.score||0)/t < 0.5;
+   }).map(r => r.scenario.category))];
+
+   return (
+    <div style={css.container}>
+     <div style={{ maxWidth:640, margin:'0 auto' }}>
+      {/* Header */}
+      <div style={{ ...css.card, padding:0, overflow:'hidden', marginBottom:16 }}>
+       <div style={{ height:4, background:`linear-gradient(90deg,${resultColor},${resultColor}80)` }} />
+       <div style={{ padding:'28px 28px 24px', textAlign:'center' }}>
+        <div style={{ fontSize:48, marginBottom:12 }}>{pct>=75?'🎉':pct>=50?'📘':'📖'}</div>
+        <h2 style={{ ...css.sectionTitle, fontSize:22, marginBottom:4 }}>Examination Complete</h2>
+        <div style={{ fontSize:11, color:theme.textMuted, marginBottom:20 }}>AI Mock Oral — DG Shipping 2nd Mate CoC</div>
+        <div style={{ fontSize:52, fontWeight:900, color:resultColor, lineHeight:1 }}>{pct}%</div>
+        <div style={{ fontSize:14, color:theme.textMuted, margin:'4px 0 16px' }}>{totalScore} / {maxScore} key points covered</div>
+        <div style={{ height:8, background:theme.border, borderRadius:4, overflow:'hidden', marginBottom:16 }}>
+         <div style={{ height:'100%', width:`${pct}%`, background:resultColor, borderRadius:4, transition:'width 1s' }}/>
+        </div>
+        <div style={{ display:'inline-block', padding:'8px 20px', borderRadius:20, fontSize:13, fontWeight:700,
+         background:`${resultColor}18`, color:resultColor, border:`1px solid ${resultColor}44` }}>
+         {pct>=75?'✅ Pass Standard' : pct>=50?'⚠️ Near Pass — More Revision Needed' : '❌ Below Pass Standard'}
+        </div>
+       </div>
+      </div>
+
+      {/* Weak areas */}
+      {weakAreas.length>0 && (
+       <div style={{ ...css.card, padding:'16px 20px', marginBottom:16,
+        background: darkMode?'#1a0a0a':'#fff8f8', border:`1px solid ${theme.danger}33` }}>
+        <div style={{ fontSize:13, fontWeight:700, color:theme.danger, marginBottom:8 }}>⚠️ Weak Areas — Focus Here</div>
+        {weakAreas.map((a,i) => <div key={i} style={{ fontSize:12, color:theme.text, padding:'3px 0' }}>• {a}</div>)}
+       </div>
+      )}
+
+      {/* Question breakdown */}
+      <div style={{ ...css.card, padding:'16px 20px', marginBottom:20 }}>
+       <div style={{ fontSize:13, fontWeight:700, marginBottom:14 }}>Question by Question</div>
+       {results.map((r,i) => {
+        const t = (r.evaluation?.covered?.length||0)+(r.evaluation?.missed?.length||0);
+        const s = r.evaluation?.score||0;
+        const qPct = t>0 ? Math.round(s/t*100) : 0;
+        const qCol = qPct>=70?theme.success:qPct>=40?theme.warning:theme.danger;
+        return (
+         <div key={i} style={{ padding:'12px 0', borderBottom: i<results.length-1?`1px solid ${theme.border}`:'none' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+           <div style={{ flex:1 }}>
+            <div style={{ fontSize:11, color:theme.textMuted, marginBottom:3 }}>Q{i+1} · {r.scenario.category}</div>
+            <div style={{ fontSize:13, fontWeight:500, lineHeight:1.4 }}>{r.scenario.question}</div>
+            {r.transcription && <div style={{ fontSize:11, color:theme.textMuted, fontStyle:'italic', marginTop:4 }}>
+             You said: "{r.transcription.slice(0,80)}{r.transcription.length>80?'…':''}"
+            </div>}
+            {r.evaluation?.missed?.length>0 && <div style={{ fontSize:11, color:theme.danger, marginTop:4 }}>
+             Missed: {r.evaluation.missed.slice(0,2).join(' · ')}{r.evaluation.missed.length>2?` +${r.evaluation.missed.length-2} more`:''}
+            </div>}
+           </div>
+           <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:18, fontWeight:800, color:qCol }}>{s}/{t}</div>
+            <div style={{ fontSize:10, color:theme.textMuted }}>{qPct}%</div>
+           </div>
+          </div>
+         </div>
+        );
+       })}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display:'flex', gap:12 }}>
+       <button onClick={() => setPhase('setup')}
+        style={{ ...css.btn(), flex:1, padding:'13px', fontSize:14, borderRadius:10 }}>
+        🔄 Try Again
+       </button>
+       <button onClick={() => navigate('home')}
+        style={{ ...css.btn('primary'), flex:1, padding:'13px', fontSize:14, borderRadius:10 }}>
+        🏠 Back to Home
+       </button>
+      </div>
+     </div>
+    </div>
+   );
+  }
+  return null;
+ };
+ // ═══════════════════════════════════════════════════════════════════════
+
  const OralPage = () => {
  const [currentQ, setCurrentQ] = useState(0);
  const [showAnswer, setShowAnswer] = useState(false);
- const [confidence, setConfidence] = useState({});
+ const [perf, setPerf] = useState(() => getOralPerf());
  const [fnFilter, setFnFilter] = useState("All"); // "All" | "F1" | "F2" | "F3"
  const [subFilter, setSubFilter] = useState("All");
  const [searchOral, setSearchOral] = useState("");
  const [examinerMode, setExaminerMode] = useState(false);
  const [oralPage, setOralPage] = useState(0);
+ const [dueOnly, setDueOnly] = useState(false);
+ const [mmdFilter, setMmdFilter] = useState("All");
+
+ // ── Groq AI Oral Examiner state ────────────────────────────────────────────
+ // micState: idle | recording | transcribing | evaluating | done | error
+ const [micState, setMicState] = useState('idle');
+ const [micError, setMicError] = useState('');
+ const [audioDevices, setAudioDevices] = useState([]);
+ const [selectedDeviceId, setSelectedDeviceId] = useState('');
+ const [transcription, setTranscription] = useState('');
+ const [evaluation, setEvaluation] = useState(null); // { covered, missed, feedback, score }
+ const [isSpeaking, setIsSpeaking] = useState(false);
+ const mediaRecorderRef = useRef(null);
+ const audioChunksRef = useRef([]);
+
+ // Reset AI state when question changes
+ useEffect(() => {
+  setMicState('idle');
+  setMicError('');
+  setTranscription('');
+  setEvaluation(null);
+  setIsSpeaking(false);
+  window.speechSynthesis?.cancel();
+ }, [currentQ]);
+
+ // TTS — examiner reads question aloud, prefers Indian male heavy voice
+ const speakQuestion = (text) => {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  // Deep, authoritative examiner voice settings
+  utter.rate = 0.78;    // deliberate, measured pace
+  utter.pitch = 0.55;   // low pitch = heavy, authoritative voice
+  utter.volume = 1;
+  utter.lang = 'en-IN'; // Indian English
+
+  // Pick best available Indian male voice
+  const pickVoice = () => {
+   const voices = window.speechSynthesis.getVoices();
+   // Prefer known Indian male voices by name
+   const priority = ['ravi', 'rishi', 'neel', 'mohan', 'arjun', 'karan'];
+   for (const name of priority) {
+    const v = voices.find(v => v.name.toLowerCase().includes(name));
+    if (v) return v;
+   }
+   // Any en-IN voice
+   const indian = voices.find(v => v.lang === 'en-IN');
+   if (indian) return indian;
+   // Fallback: deep English male
+   return voices.find(v => v.lang.startsWith('en') && (
+    v.name.toLowerCase().includes('daniel') ||
+    v.name.toLowerCase().includes('david') ||
+    v.name.toLowerCase().includes('james') ||
+    v.name.toLowerCase().includes('george')
+   )) || null;
+  };
+
+  const assignAndSpeak = () => {
+   const voice = pickVoice();
+   if (voice) utter.voice = voice;
+   utter.onstart = () => setIsSpeaking(true);
+   utter.onend = () => setIsSpeaking(false);
+   utter.onerror = () => setIsSpeaking(false);
+   window.speechSynthesis.speak(utter);
+  };
+
+  // Voices may load async — wait if needed
+  if (window.speechSynthesis.getVoices().length > 0) {
+   assignAndSpeak();
+  } else {
+   window.speechSynthesis.onvoiceschanged = () => { assignAndSpeak(); };
+  }
+ };
+
+ // Enumerate mic devices after permission granted
+ const enumerateDevices = async () => {
+  try {
+   const devices = await navigator.mediaDevices.enumerateDevices();
+   const mics = devices.filter(d => d.kind === 'audioinput');
+   setAudioDevices(mics);
+   if (mics.length > 0 && !selectedDeviceId) setSelectedDeviceId(mics[0].deviceId);
+  } catch {}
+ };
+
+ // Send audio + question to Groq, get transcription then evaluation
+ const transcribeAndEvaluate = async (audioBase64, scenario) => {
+  try {
+   // Step 1 — Groq Whisper transcription
+   setMicState('transcribing');
+   const tRes = await fetch('/api/groq-oral', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'transcribe', audioBase64 })
+   });
+   const tData = await tRes.json();
+   if (tData.error) throw new Error(tData.error);
+   const text = tData.text || '';
+   setTranscription(text);
+
+   // Step 2 — Groq LLaMA evaluation
+   setMicState('evaluating');
+   const eRes = await fetch('/api/groq-oral', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+     action: 'evaluate',
+     question: scenario.question,
+     modelAnswer: scenario.modelAnswer,
+     candidateAnswer: text
+    })
+   });
+   const eData = await eRes.json();
+   if (eData.error) throw new Error(eData.error);
+   setEvaluation(eData);
+   setMicState('done');
+  } catch (err) {
+   console.error('[Groq]', err.message);
+   setMicError(`Server error: ${err.message}`);
+   setMicState('error');
+  }
+ };
+
+ // Start recording from selected mic
+ const startRecording = async (scenario) => {
+  setMicError('');
+  // Check API availability first
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+   setMicError('Your browser does not support microphone access. Please use Chrome or Edge.');
+   setMicState('error');
+   return;
+  }
+  try {
+   const constraints = { audio: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true };
+   const stream = await navigator.mediaDevices.getUserMedia(constraints);
+   await enumerateDevices();
+   audioChunksRef.current = [];
+   const recorder = new MediaRecorder(stream);
+   recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+   recorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    const reader = new FileReader();
+    reader.onloadend = () => {
+     const base64 = reader.result.split(',')[1];
+     transcribeAndEvaluate(base64, scenario);
+    };
+    reader.readAsDataURL(blob);
+   };
+   mediaRecorderRef.current = recorder;
+   recorder.start();
+   setMicState('recording');
+  } catch (err) {
+   console.error('[Mic]', err.name, err.message);
+   const msg =
+    err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError'
+     ? 'Microphone permission denied. Click the 🔒 or 🎤 icon in your browser address bar → Allow microphone → reload this page.'
+     : err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError'
+     ? 'No microphone found on this device. Please plug in a mic or use a device with a built-in microphone.'
+     : err.name === 'NotReadableError' || err.name === 'TrackStartError'
+     ? 'Microphone is already in use by another app (Zoom, Teams, etc.). Close that app and try again.'
+     : err.name === 'OverconstrainedError'
+     ? 'Selected microphone is unavailable. Try again — the app will use your default mic.'
+     : `Mic error (${err.name}): ${err.message}`;
+   setMicError(msg);
+   setMicState('error');
+  }
+ };
+
+ const stopRecording = () => {
+  if (mediaRecorderRef.current?.state === 'recording') {
+   setMicState('transcribing'); // show loading immediately
+   mediaRecorderRef.current.stop();
+  }
+ };
+ // ── end Groq AI Oral Examiner ──────────────────────────────────────────────
+
+ const recordPerf = (qid, result) => {
+  setPerf(prev => {
+   const updated = { ...prev, [qid]: oralPerfUpdate(prev, qid, result) };
+   saveOralPerf(updated);
+   if (currentUser?.email) syncOralPerfToFirestore(currentUser.email, updated);
+   return updated;
+  });
+ };
+
+ const mmdTags = getMMDTags();
+ const allMMDs = [...new Set(Object.values(mmdTags).flat())].sort();
+ const now = Date.now();
 
  // Group by function
  const fnFiltered = fnFilter === "All" ? ORAL_SCENARIOS : ORAL_SCENARIOS.filter(s => s.category.startsWith(fnFilter));
@@ -15239,10 +18696,13 @@ export default function App() {
  }))];
  // Apply subcategory filter
  const subFiltered = subFilter === "All" ? fnFiltered : fnFiltered.filter(s => s.category.includes(subFilter));
- // Apply search
- const filtered = searchOral.trim()
+ // Apply search + due filter + MMD filter
+ const searchFiltered = searchOral.trim()
  ? subFiltered.filter(s => s.question.toLowerCase().includes(searchOral.toLowerCase()) || s.modelAnswer.toLowerCase().includes(searchOral.toLowerCase()))
  : subFiltered;
+ const dueFiltered = dueOnly ? searchFiltered.filter(s => { const p = perf[s.id]; return p?.lastSeen && (!p.nextReview || p.nextReview <= now); }) : searchFiltered;
+ const filtered = mmdFilter !== "All" ? dueFiltered.filter(s => (mmdTags[s.id] || []).includes(mmdFilter)) : dueFiltered;
+ const dueCount = searchFiltered.filter(s => { const p = perf[s.id]; return p?.lastSeen && (!p.nextReview || p.nextReview <= now); }).length;
 
  const fnCounts = {
  All: ORAL_SCENARIOS.length,
@@ -15282,6 +18742,181 @@ export default function App() {
  </div>
  <p style={{ fontSize: 17, fontWeight: 500, lineHeight: 1.6, marginBottom: 24 }}>{scenario.question}</p>
 
+ {/* ── AI Oral Examiner — Voice + Evaluation ─────────────── */}
+ <div style={{ marginBottom: 20 }}>
+
+  {/* Examiner TTS row */}
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+   <button onClick={() => speakQuestion(scenario.question)}
+    style={{ padding: '6px 14px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+     background: isSpeaking ? `${theme.accent}22` : 'transparent',
+     border: `1px solid ${isSpeaking ? theme.accent : theme.border}`,
+     color: isSpeaking ? theme.accent : theme.textMuted }}>
+    {isSpeaking ? '🔊 Examiner speaking…' : '🔊 Read question aloud'}
+   </button>
+   {isSpeaking && (
+    <button onClick={() => { window.speechSynthesis.cancel(); setIsSpeaking(false); }}
+     style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${theme.border}`,
+      background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>
+     Stop
+    </button>
+   )}
+  </div>
+
+  {/* IDLE — record button */}
+  {micState === 'idle' && (
+   <div>
+    {audioDevices.length > 1 && (
+     <select value={selectedDeviceId} onChange={e => setSelectedDeviceId(e.target.value)}
+      style={{ ...css.input, fontSize: 12, marginBottom: 8, padding: '6px 10px', width: '100%' }}>
+      {audioDevices.map(d => (
+       <option key={d.deviceId} value={d.deviceId}>{d.label || 'Microphone'}</option>
+      ))}
+     </select>
+    )}
+    <button onClick={() => startRecording(scenario)}
+     style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none',
+      background: '#e53935', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+     ⏺ &nbsp;Speak your answer
+    </button>
+    <div style={{ fontSize: 11, color: theme.textMuted, textAlign: 'center', marginTop: 6 }}>
+     Your mic · AI will transcribe and evaluate · No download needed
+    </div>
+   </div>
+  )}
+
+  {/* RECORDING */}
+  {micState === 'recording' && (
+   <div style={{ border: '2px solid #e53935', borderRadius: 12, padding: 24, textAlign: 'center',
+    background: darkMode ? '#2d0a0a' : '#fff5f5' }}>
+    <div style={{ fontSize: 32, marginBottom: 8 }}>🔴</div>
+    <div style={{ fontSize: 15, fontWeight: 700, color: '#e53935', marginBottom: 6 }}>Recording…</div>
+    <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 18 }}>Speak clearly — click Stop when done</div>
+    <button onClick={stopRecording}
+     style={{ padding: '11px 36px', borderRadius: 10, border: 'none',
+      background: '#e53935', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+     ⏹ &nbsp;Stop Recording
+    </button>
+   </div>
+  )}
+
+  {/* TRANSCRIBING */}
+  {micState === 'transcribing' && (
+   <div style={{ border: `1.5px solid ${theme.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
+    <div style={{ fontSize: 28, marginBottom: 8 }}>🎙️</div>
+    <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Transcribing…</div>
+    <div style={{ fontSize: 11, color: theme.textMuted }}>Groq Whisper is converting your speech to text</div>
+   </div>
+  )}
+
+  {/* EVALUATING */}
+  {micState === 'evaluating' && (
+   <div style={{ border: `1.5px solid ${theme.border}`, borderRadius: 12, padding: 24, textAlign: 'center' }}>
+    <div style={{ fontSize: 28, marginBottom: 8 }}>🧠</div>
+    <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, marginBottom: 4 }}>AI examiner is evaluating…</div>
+    {transcription && (
+     <div style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic', marginTop: 6 }}>
+      "{transcription.slice(0, 100)}{transcription.length > 100 ? '…' : ''}"
+     </div>
+    )}
+   </div>
+  )}
+
+  {/* DONE — AI evaluation result */}
+  {micState === 'done' && evaluation && (
+   <div style={{ border: `1.5px solid ${theme.border}`, borderRadius: 12, overflow: 'hidden' }}>
+    {/* Header / score */}
+    <div style={{ padding: '14px 18px', background: darkMode ? '#1a1a2e' : '#f4f6ff',
+     borderBottom: `1px solid ${theme.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+     <div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>📊 AI Examiner's Assessment</div>
+      <div style={{ fontSize: 11, color: theme.textMuted, fontStyle: 'italic' }}>
+       You said: "{transcription.slice(0, 100)}{transcription.length > 100 ? '…' : ''}"
+      </div>
+     </div>
+     <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 12 }}>
+      <div style={{ fontSize: 26, fontWeight: 900,
+       color: evaluation.score >= Math.round(((evaluation.covered?.length || 0) + (evaluation.missed?.length || 0)) * 0.6) ? theme.success : theme.danger }}>
+       {evaluation.score}/{(evaluation.covered?.length || 0) + (evaluation.missed?.length || 0)}
+      </div>
+      <div style={{ fontSize: 10, color: theme.textMuted }}>key points</div>
+     </div>
+    </div>
+
+    {/* Covered */}
+    {evaluation.covered?.length > 0 && (
+     <div style={{ padding: '12px 18px', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: theme.success, marginBottom: 8,
+       textTransform: 'uppercase', letterSpacing: 0.5 }}>✅ Covered ({evaluation.covered.length})</div>
+      {evaluation.covered.map((p, i) => (
+       <div key={i} style={{ fontSize: 12, color: theme.text, padding: '5px 0',
+        borderBottom: i < evaluation.covered.length - 1 ? `1px solid ${theme.border}33` : 'none',
+        lineHeight: 1.5 }}>• {p}</div>
+      ))}
+     </div>
+    )}
+
+    {/* Missed */}
+    {evaluation.missed?.length > 0 && (
+     <div style={{ padding: '12px 18px', borderBottom: `1px solid ${theme.border}`,
+      background: darkMode ? '#2d0a0a22' : '#fff8f8' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: theme.danger, marginBottom: 8,
+       textTransform: 'uppercase', letterSpacing: 0.5 }}>❌ Missed ({evaluation.missed.length})</div>
+      {evaluation.missed.map((p, i) => (
+       <div key={i} style={{ fontSize: 12, color: theme.text, padding: '5px 0',
+        borderBottom: i < evaluation.missed.length - 1 ? `1px solid ${theme.border}33` : 'none',
+        lineHeight: 1.5 }}>• {p}</div>
+      ))}
+     </div>
+    )}
+
+    {/* Examiner feedback */}
+    {evaluation.feedback && (
+     <div style={{ padding: '12px 18px', borderBottom: `1px solid ${theme.border}`,
+      background: darkMode ? '#1a1a2e' : '#f9f9ff' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, marginBottom: 4 }}>EXAMINER</div>
+      <div style={{ fontSize: 13, color: theme.text, fontStyle: 'italic', lineHeight: 1.6 }}>
+       "{evaluation.feedback}"
+      </div>
+     </div>
+    )}
+
+    {/* Actions */}
+    <div style={{ padding: '10px 18px', display: 'flex', gap: 8 }}>
+     <button onClick={() => { setMicState('idle'); setTranscription(''); setEvaluation(null); }}
+      style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: `1px solid ${theme.border}`,
+       background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>
+      🔄 Try again
+     </button>
+    </div>
+   </div>
+  )}
+
+  {/* ERROR */}
+  {micState === 'error' && (
+   <div style={{ border: `1.5px solid ${theme.danger}44`, borderRadius: 12, padding: 18,
+    background: darkMode ? '#2d0a0a' : '#fff5f5' }}>
+    <div style={{ fontSize: 13, color: theme.danger, fontWeight: 600, marginBottom: 8 }}>
+     ⚠️ Something went wrong
+    </div>
+    {micError && (
+     <div style={{ fontSize: 12, color: theme.text, marginBottom: 10, lineHeight: 1.7,
+      background: darkMode ? '#ffffff0a' : '#fff', borderRadius: 8, padding: '10px 12px',
+      border: `1px solid ${theme.border}` }}>
+      {micError}
+     </div>
+    )}
+    <button onClick={() => { setMicState('idle'); setMicError(''); }}
+     style={{ fontSize: 12, padding: '7px 16px', borderRadius: 8, border: `1px solid ${theme.border}`,
+      background: 'transparent', color: theme.textMuted, cursor: 'pointer' }}>
+     Try again
+    </button>
+   </div>
+  )}
+
+ </div>
+ {/* ── end AI Oral Examiner ────────────────────────────────── */}
+
  {showAnswer ? (
  <>
  <div style={{ padding: "20px", background: theme.surfaceAlt, borderRadius: 10, marginBottom: 20 }}>
@@ -15290,15 +18925,32 @@ export default function App() {
  <p key={i} style={{ fontSize: 14, lineHeight: 1.7, marginBottom: 4 }}>{line}</p>
  ))}
  </div>
- <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
- <span style={{ fontSize: 13, color: theme.textMuted, alignSelf: "center" }}>How confident?</span>
- {["😰 Unsure", "🤔 Okay", "😊 Confident"].map((label, i) => (
- <button key={i}
- style={{ ...css.btn(confidence[scenario.id] === i ? "primary" : "default"), padding: "6px 12px", fontSize: 12 }}
- onClick={() => setConfidence({ ...confidence, [scenario.id]: i })}>
- {label}
- </button>
- ))}
+ {/* Performance rating */}
+ <div style={{ marginBottom: 16 }}>
+  <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 8, fontWeight: 600 }}>How did you do?</div>
+  <div style={{ display: "flex", gap: 8 }}>
+   {[
+    { result: "correct", label: "✓ Got it", color: theme.success },
+    { result: "partial", label: "~ Partial", color: theme.warning },
+    { result: "wrong", label: "✗ Didn't know", color: theme.danger },
+   ].map(({ result, label, color }) => {
+    const rated = perf[scenario.id]?.lastResult === result && perf[scenario.id]?.lastSeen > Date.now() - 5000;
+    return (
+     <button key={result}
+      style={{ flex: 1, padding: "10px 6px", borderRadius: 8, fontSize: 12, cursor: "pointer", fontWeight: 700,
+       background: rated ? `${color}22` : "transparent", color: rated ? color : theme.textMuted,
+       border: `1.5px solid ${rated ? color : theme.border}`, transition: "all 0.2s" }}
+      onClick={() => recordPerf(scenario.id, result)}>
+      {label}
+     </button>
+    );
+   })}
+  </div>
+  {perf[scenario.id]?.lastSeen > 0 && (
+   <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 6 }}>
+    Streak: {perf[scenario.id]?.streak || 0} · Seen {perf[scenario.id]?.correct + perf[scenario.id]?.partial + perf[scenario.id]?.wrong} time(s)
+   </div>
+  )}
  </div>
  <button style={css.btn("primary")} onClick={() => { setCurrentQ(c => c + 1); setShowAnswer(false); }}>
  Next question →
@@ -15326,9 +18978,31 @@ export default function App() {
  <h1 style={{ ...css.sectionTitle, margin: 0, marginBottom: 4 }}>🎤 Oral Exam Question Bank</h1>
  <div style={{ fontSize: 12, color: theme.textMuted }}>{ORAL_SCENARIOS.length} questions from MMD Chennai, Kochi & surveyor oral guides</div>
  </div>
- <button style={css.btn("primary")} onClick={() => { setExaminerMode(true); setCurrentQ(Math.floor(Math.random() * filtered.length)); setShowAnswer(false); }}>
- Examiner mode
- </button>
+ <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+   <button
+     onClick={() => navigate("ai-oral")}
+     style={{
+       padding: "9px 16px", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer",
+       border: "1.5px solid rgba(212,175,55,0.4)",
+       background: "linear-gradient(135deg, #7B4FA8, #4a2080)",
+       color: "#fff",
+       display: "inline-flex", alignItems: "center", gap: 6,
+       boxShadow: "0 4px 14px rgba(123,79,168,0.4)",
+       position: "relative",
+     }}
+     onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 6px 18px rgba(123,79,168,0.55)"; }}
+     onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 4px 14px rgba(123,79,168,0.4)"; }}
+     title="AI Mock Oral Examination — speak answers, get instant AI feedback"
+   >
+     <span style={{ fontSize: 15 }}>🤖</span>
+     <span>AI Mock Oral</span>
+     <span style={{ fontSize: 8, fontWeight: 800, background: "linear-gradient(90deg,#d4af37,#e07820)",
+      color: "#fff", padding: "2px 6px", borderRadius: 10, letterSpacing: 0.5, marginLeft: 2 }}>NEW</span>
+   </button>
+   <button style={css.btn()} onClick={() => { setExaminerMode(true); setCurrentQ(Math.floor(Math.random() * filtered.length)); setShowAnswer(false); }}>
+     Examiner mode
+   </button>
+ </div>
  </div>
 
  {/* Function Tabs */}
@@ -15353,7 +19027,7 @@ export default function App() {
  </div>
 
  {/* Subcategory pills + Search */}
- <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+ <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", flex: 1 }}>
  {subCategories.slice(0, 15).map(c => (
  <button key={c} onClick={() => { setSubFilter(c); setOralPage(0); }}
@@ -15376,6 +19050,30 @@ export default function App() {
  />
  </div>
 
+ {/* Due / MMD filter bar */}
+ <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+  <button onClick={() => { setDueOnly(d => !d); setOralPage(0); }}
+   style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: dueOnly ? 700 : 400,
+    background: dueOnly ? `${theme.warning}18` : "transparent", color: dueOnly ? theme.warning : theme.textMuted,
+    border: `1px solid ${dueOnly ? theme.warning : theme.border}` }}>
+   ⏰ Due for review {dueCount > 0 ? `(${dueCount})` : ""}
+  </button>
+  {allMMDs.length > 0 && (
+   <>
+    <span style={{ fontSize: 10, color: theme.textMuted }}>MMD:</span>
+    {["All", ...allMMDs].map(m => (
+     <button key={m} onClick={() => { setMmdFilter(m); setOralPage(0); }}
+      style={{ padding: "5px 10px", borderRadius: 8, fontSize: 11, cursor: "pointer", fontWeight: mmdFilter === m ? 700 : 400,
+       background: mmdFilter === m ? `${theme.accent}18` : "transparent", color: mmdFilter === m ? theme.accent : theme.textMuted,
+       border: `1px solid ${mmdFilter === m ? theme.accent : theme.border}` }}>
+      {m}
+     </button>
+    ))}
+   </>
+  )}
+  <button style={{ ...css.btn(), padding: "5px 10px", fontSize: 11, marginLeft: "auto" }} onClick={() => navigate("dashboard")}>📊 Dashboard</button>
+ </div>
+
  {/* Results count */}
  <div style={{ fontSize: 12, color: theme.textMuted, marginBottom: 12 }}>
  Showing {oralPage * PAGE_SIZE + 1}–{Math.min((oralPage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length} questions
@@ -15383,18 +19081,30 @@ export default function App() {
 
  {/* Question cards */}
  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
- {pagedFiltered.map((scenario, i) => (
- <div key={scenario.id} style={{ ...css.card, padding: "16px 20px" }}>
+ {pagedFiltered.map((scenario, i) => {
+  const p = perf[scenario.id];
+  const isDue = p?.lastSeen && (!p.nextReview || p.nextReview <= now);
+  const perfDot = p?.lastResult === "correct" ? theme.success : p?.lastResult === "partial" ? theme.warning : p?.lastResult === "wrong" ? theme.danger : null;
+  const qMMDs = mmdTags[scenario.id] || [];
+  return (
+ <div key={scenario.id} style={{ ...css.card, padding: "16px 20px", borderLeft: isDue ? `3px solid ${theme.warning}` : undefined }}>
  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
  <div style={{ flex: 1, minWidth: 0 }}>
- <div style={{ display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap" }}>
+ <div style={{ display: "flex", gap: 5, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
  <span style={{
  ...css.badge(scenario.category.startsWith("F1") ? "#185FA5" : scenario.category.startsWith("F2") ? "#8B5E3C" : scenario.category.startsWith("F3") ? "#B71C1C" : "#534AB7"),
  fontSize: 9, padding: "2px 7px"
  }}>{scenario.category}</span>
  <span style={{ ...css.badge(scenario.difficulty === "High" ? theme.danger : theme.warning), fontSize: 9, padding: "2px 7px" }}>{scenario.difficulty}</span>
+ {perfDot && <span style={{ width: 7, height: 7, borderRadius: "50%", background: perfDot, display: "inline-block", flexShrink: 0 }} title={p.lastResult} />}
+ {isDue && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: `${theme.warning}20`, color: theme.warning, fontWeight: 700 }}>Due</span>}
+ {qMMDs.map(m => <span key={m} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: `${theme.accent}14`, color: theme.accent, fontWeight: 600 }}>📍{m}</span>)}
  </div>
- <p style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.5, margin: 0 }}>{scenario.question}</p>
+ <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+  <p style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.5, margin: 0, flex: 1 }}>{scenario.question}</p>
+  <SpeakBtn text={scenario.question} style={{ fontSize: 14 }} />
+ </div>
+ {p?.lastSeen && <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 4 }}>Streak {p.streak} · {p.correct || 0}✓ {p.partial || 0}~ {p.wrong || 0}✗</div>}
  </div>
  <button style={{ ...css.btn(), padding: "5px 12px", fontSize: 11, flexShrink: 0 }}
  onClick={() => { setExaminerMode(true); setCurrentQ(oralPage * PAGE_SIZE + i); setShowAnswer(false); }}>
@@ -15402,7 +19112,8 @@ export default function App() {
  </button>
  </div>
  </div>
- ))}
+  );
+ })}
  </div>
 
  {/* Pagination */}
@@ -15546,6 +19257,19 @@ export default function App() {
  };
 
  const AdminDashboardPage = () => {
+ // ─── Hard guard: this component MUST NOT render for non-admins. ───
+ // The parent already checks `page === "admin" && isAdmin`, but this
+ // belt-and-suspenders check protects against any future regression
+ // (e.g. someone refactors the parent and forgets the isAdmin clause).
+ if (!isAdmin) {
+   return (
+     <div style={{ padding: 60, textAlign: "center", color: theme.muted }}>
+       <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+       <h2 style={{ color: theme.text, margin: "0 0 8px" }}>Access denied</h2>
+       <p style={{ margin: 0, fontSize: 14 }}>This area is restricted to administrators.</p>
+     </div>
+   );
+ }
  const [adminTab, setAdminTab] = useState("users"); // users | analytics | feedback | corrections
  const [users, setUsers] = useState({});
  const [analytics, setAnalytics] = useState({ totalVisits: 0, dailyHits: {}, loginHistory: [], uniqueVisitors: {}, trafficSources: {}, deviceTypes: {} });
@@ -15556,6 +19280,8 @@ export default function App() {
  const [correctionItems, setCorrectionItems] = useState([]);
  const [feedbackFilter, setFeedbackFilter] = useState("all");
  const [correctionFilter, setCorrectionFilter] = useState("all");
+ const [topicViews, setTopicViews] = useState([]);
+ const [topicViewsLimit, setTopicViewsLimit] = useState(15); // 15 | 50 | "all"
 
  const loadFirestoreData = async () => {
  try {
@@ -15630,6 +19356,32 @@ export default function App() {
   setCorrectionItems(localCr.sort((a, b) => b.timestamp - a.timestamp));
  }
  } catch (err) { console.error("[Admin] Corrections load failed:", err); setCorrectionItems(getStoredCorrections()); }
+
+ // ─── Most Referred Topics: merge local + Firestore ───
+ try {
+   const localTV = Object.values((localAuth.getAnalytics().topicViews) || {});
+   const fsTV = await fetchTopicViewsFromFirestore();
+   const byId = new Map();
+   // Seed with local first, then upsert Firestore (which is canonical for cross-device sums)
+   localTV.forEach(t => { if (t?.id) byId.set(t.id, { ...t }); });
+   if (Array.isArray(fsTV)) {
+     fsTV.forEach(t => {
+       if (!t?.id) return;
+       const existing = byId.get(t.id);
+       if (!existing) {
+         byId.set(t.id, { ...t });
+       } else {
+         byId.set(t.id, {
+           ...existing,
+           ...t,
+           count: Math.max(existing.count || 0, t.count || 0),
+           lastViewedAt: Math.max(existing.lastViewedAt || 0, t.lastViewedAt || 0),
+         });
+       }
+     });
+   }
+   setTopicViews(Array.from(byId.values()).sort((a, b) => (b.count || 0) - (a.count || 0)));
+ } catch (err) { console.error("[Admin] Topic views load failed:", err); }
  };
 
  useEffect(() => {
@@ -15638,6 +19390,9 @@ export default function App() {
  setAnalytics(localAuth.getAnalytics());
  setFeedbackItems(getStoredFeedback().sort((a, b) => b.timestamp - a.timestamp));
  setCorrectionItems(getStoredCorrections().sort((a, b) => b.timestamp - a.timestamp));
+ // Local topic-view stats render immediately, Firestore merge happens async
+ const localTV = Object.values((localAuth.getAnalytics().topicViews) || {});
+ setTopicViews(localTV.sort((a, b) => (b.count || 0) - (a.count || 0)));
  // Then fetch and merge Firestore data
  loadFirestoreData();
  }, []);
@@ -16049,6 +19804,59 @@ export default function App() {
  </div>
  </div>
 
+ {/* Most Referred Topics */}
+ <div style={{ ...css.card, padding: 24, marginBottom: 20 }}>
+ <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, gap: 12, flexWrap: "wrap" }}>
+   <h3 style={{ fontSize: 14, fontWeight: 700, color: theme.text, margin: 0 }}>📚 Most Referred Topics</h3>
+   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+     <span style={{ fontSize: 11, color: theme.textMuted }}>Show:</span>
+     {[15, 50, "all"].map(n => (
+       <button key={String(n)} onClick={() => setTopicViewsLimit(n)}
+         style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: topicViewsLimit === n ? 700 : 500, cursor: "pointer", border: `1px solid ${topicViewsLimit === n ? theme.accent : theme.border}`, background: topicViewsLimit === n ? theme.accentLight : "transparent", color: topicViewsLimit === n ? theme.accent : theme.textMuted, textTransform: n === "all" ? "capitalize" : "none" }}>
+         {n === "all" ? "All" : `Top ${n}`}
+       </button>
+     ))}
+   </div>
+ </div>
+ {topicViews.length === 0 ? (
+   <div style={{ padding: 30, textAlign: "center", color: theme.textMuted, fontSize: 13 }}>
+     No topic views recorded yet — data will appear here as users browse topics.
+   </div>
+ ) : (() => {
+   const list = topicViewsLimit === "all" ? topicViews : topicViews.slice(0, topicViewsLimit);
+   const maxCount = Math.max(...list.map(t => t.count || 0), 1);
+   return (
+     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+       {list.map((t, i) => {
+         const widthPct = ((t.count || 0) / maxCount) * 100;
+         const isTop3 = i < 3;
+         return (
+           <div key={t.id} style={{ position: "relative", padding: "10px 14px", borderRadius: 8, background: darkMode ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)", border: `1px solid ${theme.border}`, overflow: "hidden" }}>
+             {/* Bar fill behind text */}
+             <div style={{ position: "absolute", inset: 0, width: `${widthPct}%`, background: isTop3 ? "linear-gradient(90deg, rgba(212,175,55,0.18), rgba(212,175,55,0.06))" : `linear-gradient(90deg, ${theme.accent}22, ${theme.accent}08)`, transition: "width 0.4s ease" }} />
+             <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+               <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: isTop3 ? "#1a1a2e" : theme.text, background: isTop3 ? "linear-gradient(135deg, #d4af37, #b8962e)" : (darkMode ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)") }}>
+                 {i + 1}
+               </div>
+               <div style={{ flex: 1, minWidth: 0 }}>
+                 <div style={{ fontSize: 13, fontWeight: 600, color: theme.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name || t.id}</div>
+                 <div style={{ fontSize: 10, color: theme.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                   {[t.subjectName, t.moduleName].filter(Boolean).join(" › ") || "—"}
+                 </div>
+               </div>
+               <div style={{ flexShrink: 0, textAlign: "right" }}>
+                 <div style={{ fontSize: 14, fontWeight: 700, color: theme.text, fontFamily: "'JetBrains Mono', monospace" }}>{t.count || 0}</div>
+                 <div style={{ fontSize: 9, color: theme.textMuted }}>{(t.count || 0) === 1 ? "view" : "views"}</div>
+               </div>
+             </div>
+           </div>
+         );
+       })}
+     </div>
+   );
+ })()}
+ </div>
+
  {/* Recent Login Activity */}
  <div style={{ ...css.card, padding: 24 }}>
  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 18, color: theme.text }}>🔑 Recent Logins</h3>
@@ -16198,88 +20006,7 @@ export default function App() {
  );
  };
 
- // ═══════════════════════════════════════════════
- // PAGE: PROGRESS DASHBOARD
- // ═══════════════════════════════════════════════
- const DashboardPage = () => {
- const totalTopics = getAllTopics().length;
- const completedTopics = Object.values(progress).filter(p => p.completed).length;
- const totalMCQs = getAllMCQs().length;
- const quizResults = Object.values(progress).filter(p => p.quizScore !== undefined);
- const avgScore = quizResults.length > 0 ? Math.round(quizResults.reduce((a, p) => a + (p.quizScore / p.quizTotal) * 100, 0) / quizResults.length) : 0;
- const readinessScore = totalTopics > 0 ? Math.round(((completedTopics / totalTopics) * 40) + ((avgScore / 100) * 60)) : 0;
-
- return (
- <div style={css.container}>
- <BackToMainButton />
- <Breadcrumb items={[{ label: "Home", onClick: () => navigate("home") }, { label: "Progress dashboard" }]} />
- <h1 style={{ ...css.sectionTitle, marginBottom: 24 }}>📊 Progress dashboard</h1>
-
- <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 32 }}>
- <StatCard label="Exam readiness" value={`${readinessScore}%`} color={readinessScore >= 70 ? theme.success : readinessScore >= 40 ? theme.warning : theme.danger} sub="Weighted score" />
- <StatCard label="Topics completed" value={`${completedTopics}/${totalTopics}`} color={theme.accent} />
- <StatCard label="Avg quiz score" value={`${avgScore}%`} color={avgScore >= 70 ? theme.success : theme.warning} sub={`${quizResults.length} quizzes taken`} />
- <StatCard label="Bookmarks" value={bookmarks.length} color="#534AB7" />
- </div>
-
- <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Subject breakdown</h2>
- <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
- {SUBJECTS.map(subj => {
- const topics = subj.modules.flatMap(m => m.topics);
- const done = topics.filter(t => progress[t.id]?.completed).length;
- const pct = topics.length > 0 ? Math.round((done / topics.length) * 100) : 0;
- const subjQuizzes = topics.map(t => progress[t.id]).filter(p => p?.quizScore !== undefined);
- const subjAvg = subjQuizzes.length > 0 ? Math.round(subjQuizzes.reduce((a, p) => a + (p.quizScore / p.quizTotal) * 100, 0) / subjQuizzes.length) : null;
-
- return (
- <div key={subj.id} style={{ ...css.card, padding: "18px 22px", cursor: "pointer" }}
- onClick={() => navigate("subject", subj)}>
- <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
- <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
- <span style={{ fontSize: 20 }}>{subj.icon}</span>
- <span style={{ fontWeight: 600 }}>{subj.name}</span>
- </div>
- <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
- {subjAvg !== null && <span style={{ fontSize: 12, color: subjAvg >= 70 ? theme.success : theme.warning }}>Quiz avg: {subjAvg}%</span>}
- <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: subj.color }}>{pct}%</span>
- </div>
- </div>
- <ProgressBar value={done} max={topics.length} color={subj.color} height={6} />
- <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 6 }}>{done}/{topics.length} topics completed</div>
- </div>
- );
- })}
- </div>
-
- {bookmarks.length > 0 && (
- <div style={{ marginTop: 32 }}>
- <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>★ Bookmarked topics</h2>
- <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
- {bookmarks.map(bId => {
- const topic = getAllTopics().find(t => t.id === bId);
- if (!topic) return null;
- return (
- <div key={bId} style={{ ...css.card, padding: "12px 18px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
- <span style={{ fontSize: 14 }}>{topic.name}</span>
- <span style={{ color: theme.textMuted, fontSize: 18 }}>›</span>
- </div>
- );
- })}
- </div>
- </div>
- )}
-
- {Object.keys(progress).length > 0 && (
- <div style={{ marginTop: 32, textAlign: "center" }}>
- <button style={{ ...css.btn("danger"), fontSize: 12, padding: "8px 16px" }}
- onClick={() => { if (confirm("Reset all progress? This cannot be undone.")) { setProgress({}); setBookmarks([]); } }}>
- Reset all progress
- </button>
- </div>
- )}
- </div>
- );
- };
+ // (DashboardPage defined above — old placeholder removed)
 
  // ═══════════════════════════════════════════════
  // RENDER
@@ -16451,8 +20178,14 @@ export default function App() {
  {page === "topic" && <TopicPage />}
  {page === "quiz" && <QuizPage />}
  {page === "oral" && <OralPage />}
+ {page === "ai-oral" && <AIMockOralPage />}
  {page === "dashboard" && <DashboardPage />}
+ {page === "exam-reports" && <ExamReportsPage />}
  {page === "formulas" && <FormulasPage />}
+ {page === "mockexam" && <MockExamPage />}
+ {page === "srs-review" && <SRSReviewPage />}
+ {page === "lights-quiz" && <LightsQuizPage />}
+ {page === "flashcards" && <FlashcardDecksPage />}
  {page === "admin" && isAdmin && <AdminDashboardPage />}
 
  {/* Floating Feedback Button */}
